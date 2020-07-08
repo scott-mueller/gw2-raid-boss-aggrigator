@@ -1,0 +1,20 @@
+{
+  "name": "gw2-raid-boss-aggrigator",
+  "version": "1.0.0",
+  "description": "discord bot to aggrigate gw2 boss kills",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scott-mueller/gw2-raid-boss-aggrigator.git"
+  },
+  "author": "Scott Mueller (scott.mueller12@hotmail.com)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/scott-mueller/gw2-raid-boss-aggrigator/issues"
+  },
+  "homepage": "https://github.com/scott-mueller/gw2-raid-boss-aggrigator#readme",
+  "dependencies": {
+    "discord.io": "https://github.com/woor/discord.io/tarball/gateway_v6",
+    "winston": "^3.3.3"
+  }
+}

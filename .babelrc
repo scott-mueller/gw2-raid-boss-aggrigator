@@ -1,0 +1,19 @@
+{
+    "presets": [
+        [
+            "env",
+            {
+                "targets": {
+                    "node": "current"
+                }
+            }
+        ]
+    ],
+    "plugins": [],
+    "env": {
+        "debug": {
+          "sourceMap": "inline",
+          "retainLines": true
+        }
+    }
+}

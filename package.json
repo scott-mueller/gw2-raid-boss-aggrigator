@@ -9,17 +9,18 @@
   },
   "scripts": {
     "start": "node bootstrap.js",
-    "debug": "nodemon --inspect bootstrap.js"
+    "debug": "nodemon --inspect=4500 bootstrap.js"
   },
   "author": "Scott Mueller (scott.mueller12@hotmail.com)",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "discord.io": "https://github.com/woor/discord.io/tarball/gateway_v6",
-    "winston": "^3.3.3",
     "babel-preset-env": "^1.7.0",
     "babel-register": "^6.26.0",
-    "ramda": "^0.26.1"
+    "chai": "^4.2.0",
+    "discord.io": "https://github.com/woor/discord.io/tarball/gateway_v6",
+    "ramda": "^0.26.1",
+    "redis": "^3.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.10.4",

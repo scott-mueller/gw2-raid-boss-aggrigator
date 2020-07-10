@@ -1,5 +1,5 @@
 import { Server } from '../server';
-import { pathOr } from 'ramda';
+import { pathOr, type } from 'ramda';
 import { getMessages } from './discord';
 
 const _getAllmessages = async function () {
@@ -70,12 +70,67 @@ const _handleSingleBoss = async function (channelID, boss) {
 
 };
 
+
+const _handleInit = async function (args, channelID) {
+
+    // First argument needs to be a channelID
+    const channelIdRegex = new RegExp('<#\d*>');
+    console.log( args[0] );
+    console.log( !channelIdRegex.test(args[0]) );
+    if (!channelIdRegex.test(args[0])) {
+        Server.bot.sendMessage({
+            to: channelID,
+            message: 'You did not provide a valid channel to init on'
+        });
+    }
+
+    // ChannelID also needs to be a channel on the server this message was sent on
+    console.log( Server.channels );
+
+};
+
+const _handleStatsForSingleBoss = async function (args, channelID) {
+
+    Server.bot.sendMessage({
+        to: channelID,
+        message: 'This command is not ready yet :( Sorry'
+    });
+};
+
+const _handleStatsDeepForSingleBoss = async function (args, channelID) {
+
+    Server.bot.sendMessage({
+        to: channelID,
+        message: 'This command is not ready yet :( Sorry'
+    });
+};
+
+const _handleFullRaidReport = async function (args, channelID) {
+
+    Server.bot.sendMessage({
+        to: channelID,
+        message: 'This command is not ready yet :( Sorry'
+    });
+};
+
+const _handlePlayerSummary = async function (args, channelID) {
+
+    Server.bot.sendMessage({
+        to: channelID,
+        message: 'This command is not ready yet :( Sorry'
+    });
+};
+
+
 export const handleMessage = function (user, userID, channelID, message, evt) {
 
     // Our bot needs to know if it will execute a command
     // It will listen for messages that will start with `>`
     if (message.substring(0, 1) === '>') {
-        const cmd = message.substring(1);
+
+        let args = message.substring(1).split(' ');
+        const cmd = args[0];
+        args = args.splice(1);
 
         switch (cmd) {
 
@@ -87,14 +142,33 @@ export const handleMessage = function (user, userID, channelID, message, evt) {
                 });
                 break;
 
+            case 'init':
+                _handleInit(args, channelID);
+                break;
+
             case 'stats':
-                console.log( 'fetching stats' );
-                _handleGetStats(channelID);
+                _handleStatsForSingleBoss(args, channelID);
+                break;
+
+            case 'report':
+                _handleFullRaidReport(args, channelID);
+                break;
+
+            case 'player-summary':
+                _handlePlayerSummary(args, channelID);
+                break;
+
+            case 'stats-deep':
+                _handleStatsDeepForSingleBoss(args, channelID);
                 break;
 
             default:
-                _handleSingleBoss(channelID, cmd);
-                break;
+                Server.bot.sendMessage({
+                    to: channelID,
+                    message: 'This command is not supported at this time'
+                });
         }
     }
-};
+}
+
+;

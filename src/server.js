@@ -1,33 +1,52 @@
 import { handleMessage } from './methods/messages';
+import { config as Config } from './config';
+import { redisGet, redisSet, redisDel } from './methods/redis';
+import { assert } from 'chai';
 
 const Discord = require('discord.io');
-const Logger = require('winston');
-const Auth = require('./auth.json');
+const Redis = require('redis');
+
 
 export const Server = {
-    bot: undefined
+    bot: undefined,
+    redisClient: undefined
 };
 
 export const startServer = async function () {
 
-    // Configure logger settings
-    Logger.remove(Logger.transports.Console);
-    Logger.add(new Logger.transports.Console(), {
-        colorize: true
+    // Connect to Redis
+    const rClient = Redis.createClient(Config.redis);
+
+    rClient.on('ready', async () => {
+
+        console.log('Redis Client Connected');
+        Server.redisClient = rClient;
+
+
+        // a quick IO test
+        await redisSet('test', 'testStr');
+        const val = await redisGet('test');
+        await redisDel('test');
+        assert.equal(val, 'testStr');
+
     });
-    Logger.level = 'debug';
+
+    rClient.on('error', (error) => {
+
+        console.error(error);
+    });
 
     // Initialize Discord Bot
     const bot = new Discord.Client({
-        token: Auth.token,
+        token: Config.auth.token,
         autorun: true
     });
 
     bot.on('ready', (evt) => {
 
-        Logger.info('Connected');
-        Logger.info('Logged in as: ');
-        Logger.info(bot.username + ' - (' + bot.id + ')');
+        console.log('Connected');
+        console.log('Logged in as: ');
+        console.log(bot.username + ' - (' + bot.id + ')');
 
         Server.bot = bot;
     });

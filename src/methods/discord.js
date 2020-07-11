@@ -1,26 +1,34 @@
 import { Server } from '../server';
 import { redisGet, redisSet } from './redis';
+import { pathOr } from 'ramda';
 
-const _maybeAddBossNamesToAllowedBossesList = async function (messages) {
+const _maybeAddBossNamesToAllowedBossesList = async function (guildId, messages) {
 
-    const messageNames = await redisGet('bossNames') || [];
+    const config = await redisGet(guildId);
+    const bossNames = config.bossNames || [];
 
     messages.forEach((message) => {
 
-        const embed = message.embeds[0];
+        if (message.embeds && message.embeds.length > 0) {
+            const embed = message.embeds[0];
 
-        if (embed && !messageNames.includes(embed.title)) {
-            messageNames.push(embed.title);
+            // Lets make sure this is an arcDPS log embed
+            if (embed.url && embed.url.includes('dps.report')) {
+                if (!bossNames.includes(embed.title)) {
+                    bossNames.push(embed.title.toLowerCase());
+                }
+            }
         }
     });
 
-    await redisSet('bossNames', messageNames);
+    config.bossNames = bossNames;
+    await redisSet('bossNames', config);
 };
 
-export const getMessages = function (before) {
+export const getMessages = function (guildId, channelID, before) {
 
     const options = {
-        channelID: '702009085024927744',
+        channelID,
         limit: 100,
         before
     };
@@ -34,32 +42,33 @@ export const getMessages = function (before) {
                 return [];
             }
 
-            await _maybeAddBossNamesToAllowedBossesList(messages);
+            await _maybeAddBossNamesToAllowedBossesList(guildId, messages);
 
             return resolve(messages);
         });
     });
 };
 
-export const getAllmessages = async function () {
+export const getAllmessages = async function (guildId, channelID) {
 
     let allMessages = [];
     let gotAllMessages = false;
 
+    console.log( `Fetching messages for ${guildId}` );
+
     while (!gotAllMessages) {
 
         const id = pathOr(undefined, ['id'])(allMessages[allMessages.length - 1]);
-        const messages = await getMessages(id);
+        const messages = await getMessages(guildId, channelID, id);
 
         if (messages.length === 0 || allMessages.length >= 10000) {
             gotAllMessages = true;
-            console.log( 'DONE!!' );
             break;
         }
 
         allMessages = allMessages.concat(messages);
     }
 
-    console.log( 'TotalMessages: ' + allMessages.length );
+    console.log( 'DONE - TotalMessages: ' + allMessages.length );
     return allMessages;
 };

@@ -23,7 +23,7 @@ export const redisGet = function (key) {
 
             // Lets format stringified JSON back into an object
             if (result.includes('{')) {
-                return resolve(JSON.parse(result.item));
+                return resolve(JSON.parse(result));
             }
 
             return resolve(result);
@@ -54,8 +54,6 @@ export const redisSet = function (key, value) {
                 return resolve();
             }
 
-            console.log( res );
-
             return resolve(res);
         });
     });
@@ -77,8 +75,6 @@ export const redisDel = function (key) {
                 console.log( err );
                 return resolve();
             }
-
-            console.log( res );
 
             return resolve(res);
         });

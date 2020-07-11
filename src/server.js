@@ -29,6 +29,14 @@ export const startServer = async function () {
         await redisDel('test');
         assert.equal(val, 'testStr');
 
+
+        const metadata = await redisGet('metadata');
+        if (!metadata) {
+            await redisSet('metadata', {
+                bossicons: []
+            });
+        }
+
     });
 
     rClient.on('error', (error) => {

@@ -1,6 +1,6 @@
 import { Server } from '../server';
 import { redisGet, redisSet } from './redis';
-import { pathOr, uniq } from 'ramda';
+import { pathOr, uniq, path } from 'ramda';
 
 const _maybeAddBossNamesToAllowedBossesList = async function (guildId, messages) {
 
@@ -26,6 +26,29 @@ const _maybeAddBossNamesToAllowedBossesList = async function (guildId, messages)
     await redisSet(guildId, config);
 };
 
+const _maybeAddBossIconToIconStore = async function (messages) {
+
+    for (let i = 0; i < messages.length; ++i) {
+        const message = messages[i];
+
+        if (message.embeds && message.embeds.length > 0) {
+            const embed = message.embeds[0];
+
+            // Lets make sure this is an arcDPS log embed
+            if (embed.url && embed.url.includes('dps.report')) {
+
+                // try to get the boss
+                const boss = await redisGet(embed.title);
+
+                if (!boss && path(['thumbnail', 'url'])(embed)) {
+
+                    await redisSet(embed.title, path(['thumbnail', 'url'])(embed));
+                }
+            }
+        }
+    }
+};
+
 export const getMessages = function (guildId, channelID, before) {
 
     const options = {
@@ -44,6 +67,7 @@ export const getMessages = function (guildId, channelID, before) {
             }
 
             await _maybeAddBossNamesToAllowedBossesList(guildId, messages);
+            //await _maybeAddBossIconToIconStore(messages);
 
             return resolve(messages);
         });

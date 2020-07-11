@@ -135,9 +135,42 @@ const _handleStatsForSingleBoss = async function (args, channelID) {
         }
     });
 
+    // Format the boss name we're returning
+    const bossNameArr = bossName.toLowerCase().split(' ');
+    if (bossNameArr[bossNameArr.length - 1].toLowerCase() === 'cm') {
+        bossNameArr[bossNameArr.length - 1] = bossNameArr[bossNameArr.length - 1].toUpperCase();
+    }
+
+    for (let i = 0; i < bossNameArr.length; ++i) {
+
+        bossNameArr[i] = bossNameArr[i].charAt(0).toUpperCase() + bossNameArr[i].slice(1);
+    }
+
+    const embed = {
+        title: `**${bossNameArr.join(' ')}**`,
+        color: 4688353,
+        fields: [
+            {
+                name: 'Totals',
+                value: `**Success**: ${successCount}\n**Failure**: ${failureCount}\n**Total**: ${totalCount}`
+            },
+            {
+                name: 'Success Rate',
+                value: `${((successCount / totalCount) * 100).toFixed(1)}%`
+            }
+        ]
+    };
+
+    const thumbnailUrl = await redisGet(bossNameArr.join(' '));
+    if (thumbnailUrl) {
+        embed.thumbnail = {
+            url: thumbnailUrl
+        };
+    }
+
     Server.bot.sendMessage({
         to: channelID,
-        message: `${bossName}: Success: ${successCount}, Failure: ${failureCount}, Total: ${totalCount}, Success Rate: ${((successCount / totalCount) * 100).toFixed(1)}%`
+        embed
     });
 };
 
@@ -346,6 +379,13 @@ export const handleMessage = function (user, userID, channelID, message, evt) {
 
             case 'deauth':
                 _handleDeauth(args, channelID, userID);
+                break;
+
+            case 'player-summery':
+                Server.bot.sendMessage({
+                    to: channelID,
+                    message: 'Dumb bitch!'
+                });
                 break;
 
             default:

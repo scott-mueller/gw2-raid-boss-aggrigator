@@ -1,6 +1,6 @@
 import { Server } from '../server';
 import { redisGet, redisSet } from './redis';
-import { pathOr } from 'ramda';
+import { pathOr, uniq } from 'ramda';
 
 const _maybeAddBossNamesToAllowedBossesList = async function (guildId, messages) {
 
@@ -14,15 +14,16 @@ const _maybeAddBossNamesToAllowedBossesList = async function (guildId, messages)
 
             // Lets make sure this is an arcDPS log embed
             if (embed.url && embed.url.includes('dps.report')) {
-                if (!bossNames.includes(embed.title)) {
+                if (!bossNames.includes(embed.title.toLowerCase())) {
                     bossNames.push(embed.title.toLowerCase());
                 }
             }
         }
     });
 
-    config.bossNames = bossNames;
-    await redisSet('bossNames', config);
+    config.bossNames = uniq(bossNames);
+
+    await redisSet(guildId, config);
 };
 
 export const getMessages = function (guildId, channelID, before) {

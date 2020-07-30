@@ -19,6 +19,7 @@
     "babel-register": "^6.26.0",
     "chai": "^4.2.0",
     "discord.io": "https://github.com/woor/discord.io/tarball/gateway_v6",
+    "mongodb": "^3.5.9",
     "ramda": "^0.26.1",
     "redis": "^3.0.2"
   },

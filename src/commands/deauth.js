@@ -3,7 +3,7 @@ import { redisDel } from '../methods/redis';
 
 export const handleDeauth = async function (args, channelID, userID) {
 
-    // We need to authenticate the use to make this call
+    // We need to authenticate the user to make this call
     const activeGuildId = Server.bot.channels[channelID].guild_id;
     const discordServer = Server.bot.servers[activeGuildId];
     const userRoles = discordServer.members[userID].roles;

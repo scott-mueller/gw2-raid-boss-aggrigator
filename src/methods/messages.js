@@ -1,5 +1,5 @@
+import { config } from '../config';
 import { Server } from '../server';
-import { redisGet } from './redis';
 
 import { handleInit } from '../commands/init';
 import { handleDeauth } from '../commands/deauth';
@@ -7,35 +7,11 @@ import { handleStatsForSingleBoss } from '../commands/stats';
 import { handleStatsDeepForSingleBoss } from '../commands/stats-deep';
 import { handleFullRaidReport } from '../commands/report';
 
-const processNewLog = async function (channelID, embed) {
+import { handleInitialPopulate } from './maintenance';
 
-    //TODO
-    console.log( 'got a new log!' );
-};
-
-
-const handleListenChannelMessage = async function (channelID, message) {
-
-    // Lets check if this is a plenBot embed message
-    if (message.embeds && message.embeds.length > 0) {
-        const embed = message.embeds[0];
-
-        // Lets make sure this is an arcDPS log embed
-        if (embed.url && embed.url.includes('dps.report')) {
-
-            // process the message
-            await processNewLog(channelID, embed);
-        }
-    }
-};
+import { maybeProcessEncounter } from './processEncounter';
 
 export const handleMessage = async function (user, userID, channelID, message, evt) {
-
-    // We want to listen for messages coming from any of our configured channels.
-    const listenChannels = await redisGet('listenChannels');
-    if (listenChannels.includes(channelID)) {
-        handleListenChannelMessage(channelID, message);
-    }
 
     // Our bot needs to know if it will execute a command
     // It will listen for messages that will start with `>`
@@ -118,7 +94,7 @@ export const handleMessage = async function (user, userID, channelID, message, e
 
             case 'player-summary':
                 Server.bot.simulateTyping(channelID);
-                _handlePlayerSummary(args, channelID);
+                handlePlayerSummary(args, channelID);
                 break;
 
             case 'stats-deep':
@@ -143,5 +119,43 @@ export const handleMessage = async function (user, userID, channelID, message, e
                     message: 'This command is not supported at this time'
                 });
         }
+
+        return;
     }
+
+    // Maintenance routes stats with `}`
+    // These are not publically accsessible and can only be executed by certain userIds
+    if (message.substring(0, 1) === '}') {
+
+        if (!config.maintenanceUsers.includes(userID)) {
+            Server.bot.sendMessage({
+                to: channelID,
+                message: 'You do not have permission to run maintenance commands'
+            });
+            return;
+        }
+
+        let args = message.substring(1).split(' ');
+        const cmd = args[0];
+        args = args.splice(1);
+
+        switch (cmd) {
+
+            case 'initial-db-populate':
+                handleInitialPopulate(args, channelID);
+                break;
+
+            case 'scrape-channel':
+                //TODO - scrapes all messages in a channel for logs
+                // WARNING - Wiill be very resource intensive, don't expect a response for a while and the bot will be unusable during this time
+                break;
+        }
+
+        return;
+    }
+
+    // No commands found. Maybe we have en encounter to process?
+    const guildId = Server.bot.channels[channelID].guild_id;
+    maybeProcessEncounter(guildId, message);
+    return;
 };

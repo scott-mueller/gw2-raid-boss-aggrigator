@@ -98,6 +98,8 @@ export const startServer = async function () {
     bot.on('message', (user, userID, channelID, message, evt) => {
 
         handleMessage(user, userID, channelID, message, evt);
+
+        console.log( `Message proceesseed: UserID: ${userID}, ChannelID: ${channelID}` );
     });
 };
 

@@ -13,6 +13,12 @@ import { maybeProcessEncounter } from './processEncounter';
 
 export const handleMessage = async function (user, userID, channelID, message, evt) {
 
+    // No commands found. Maybe we have en encounter to process?
+    const guildId = Server.bot.channels[channelID].guild_id;
+    await maybeProcessEncounter(guildId, evt.d);
+    return;
+
+
     // Our bot needs to know if it will execute a command
     // It will listen for messages that will start with `>`
     if (message.substring(0, 1) === '>') {
@@ -153,9 +159,4 @@ export const handleMessage = async function (user, userID, channelID, message, e
 
         return;
     }
-
-    // No commands found. Maybe we have en encounter to process?
-    const guildId = Server.bot.channels[channelID].guild_id;
-    maybeProcessEncounter(guildId, message);
-    return;
 };

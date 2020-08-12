@@ -7,100 +7,125 @@ import { assert } from 'chai';
 const Discord = require('discord.io');
 const Redis = require('redis');
 
-
 export const Server = {
     bot: undefined,
     redisClient: undefined,
     db: undefined
 };
 
+const startTestServer = function () {
+
+    console.log( 'Starting Test Server' );
+
+    Server.db = {
+        collection: () => {
+
+            return;
+        }
+    };
+
+    return;
+};
+
 export const startServer = async function () {
 
+    if (process.env.APP_ENVIRONMENT === 'TEST') {
+        return startTestServer();
+    }
+
+    const promises = [];
+
     // Connect to mongo
-    const MongoClient = require('mongodb').MongoClient;
+    promises.push(new Promise( (resolve, reject) => {
 
-    MongoClient.connect(Config.mongo.url, async (err, client) => {
+        const MongoClient = require('mongodb').MongoClient;
 
-        assert.equal(null, err);
-        console.log( 'MongoDB connected' );
+        MongoClient.connect(Config.mongo.url, async (err, client) => {
 
-        Server.db = client.db(Config.mongo.dbName);
+            assert.equal(null, err);
+            console.log( 'MongoDB connected' );
 
-        // Quick IO test
-        const test = {
-            _id: '12345',
-            val: 'yes'
-        };
+            Server.db = client.db(Config.mongo.dbName);
 
-        await mongoInsert('messages', test);
-        const doc1 = await mongoFind('messages', { val: 'yes' });
-        assert.isArray(doc1);
-        assert.equal(test.val, doc1[0].val);
+            // Quick IO test
+            const test = {
+                _id: '12345',
+                val: 'yes'
+            };
 
-        await mongoUpdateById('messages', '12345', { val: 'no' });
-        const doc2 = await mongoFind('messages', { val: 'no' });
-        assert.isArray(doc2);
-        assert.equal('no', doc2[0].val);
+            await mongoInsert('icons', test);
+            const doc1 = await mongoFind('icons', { val: 'yes' });
+            assert.isArray(doc1);
+            assert.equal(test.val, doc1[0].val);
 
-        await mongoDeleteById('messages', '12345');
-        const doc3 = await mongoFind('messages', { val: 'no' });
-        assert.isArray(doc3);
+            await mongoUpdateById('icons', '12345', { val: 'no' });
+            const doc2 = await mongoFind('icons', { val: 'no' });
+            assert.isArray(doc2);
+            assert.equal('no', doc2[0].val);
 
-        // Need to store some data in redis
-        process.emit('mongoReady');
-    });
+            await mongoDeleteById('icons', '12345');
+            const doc3 = await mongoFind('icons', { val: 'no' });
+            assert.isArray(doc3);
+
+            // Need to store some data in redis
+            process.emit('mongoReady');
+            return resolve('Mongo Ready');
+        });
+    }));
 
     // Connect to Redis
-    const rClient = Redis.createClient(Config.redis);
+    promises.push(new Promise( (resolve, reject) => {
 
-    rClient.on('ready', async () => {
+        const rClient = Redis.createClient(Config.redis);
 
-        console.log('Redis Client Connected');
-        Server.redisClient = rClient;
+        rClient.on('ready', async () => {
 
+            Server.redisClient = rClient;
 
-        // a quick IO test
-        await redisSet('test', 'testStr');
-        const val = await redisGet('test');
-        await redisDel('test');
-        assert.equal(val, 'testStr');
+            // a quick IO test
+            await redisSet('test', 'testStr');
+            const val = await redisGet('test');
+            await redisDel('test');
+            assert.equal(val, 'testStr');
 
+            console.log('Redis Client Connected');
+            return resolve('Redis Ready');
+        });
 
-        const metadata = await redisGet('metadata');
-        if (!metadata) {
-            await redisSet('metadata', {
-                bossicons: []
-            });
-        }
+        rClient.on('error', (error) => {
 
-    });
-
-    rClient.on('error', (error) => {
-
-        console.error(error);
-    });
+            console.error(error);
+        });
+    }));
 
     // Initialize Discord Bot
-    const bot = new Discord.Client({
-        token: Config.auth.token,
-        autorun: true
-    });
+    promises.push(new Promise( (resolve, reject) => {
 
-    bot.on('ready', (evt) => {
+        const bot = new Discord.Client({
+            token: Config.auth.token,
+            autorun: true
+        });
 
-        console.log('Connected');
-        console.log('Logged in as: ');
-        console.log(bot.username + ' - (' + bot.id + ')');
+        bot.on('ready', (evt) => {
 
-        Server.bot = bot;
-    });
+            console.log('Connected');
+            console.log('Logged in as: ');
+            console.log(bot.username + ' - (' + bot.id + ')');
 
-    bot.on('message', (user, userID, channelID, message, evt) => {
+            Server.bot = bot;
 
-        handleMessage(user, userID, channelID, message, evt);
+            return resolve('Discord Bot Ready');
+        });
 
-        console.log( `Message proceesseed: UserID: ${userID}, ChannelID: ${channelID}` );
-    });
+        bot.on('message', async (user, userID, channelID, message, evt) => {
+
+            console.log( `Message Recieved: UserID: ${userID}, ChannelID: ${channelID}` );
+            await handleMessage(user, userID, channelID, message, evt);
+        });
+
+    }));
+
+    return await Promise.all(promises);
 };
 
 process.on( 'mongoReady', async () => {

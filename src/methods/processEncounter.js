@@ -1,48 +1,83 @@
-import { path } from 'ramda';
+import { path, pathOr } from 'ramda';
 import { mongoFind, mongoInsert } from './mongo';
 
 const Axios = require('axios');
 const Short = require('short-uuid');
 const Moment = require('moment-timezone');
 
-const computeRole = function (player, buffMap) {
+const computeRoles = function (bossHealthLost, player, buffMap) {
 
-    // Do they have support stats
-    const supportCountStat = player.concentration + player.healing + player.toughness;
-    if (supportCountStat > 5) {
-        return 'Support';
+    // Tag List
+    /**
+     * Support
+     * Toughness
+     * Quickness
+     * Alacrity
+     * Might
+     * Banner Slave
+     * Power DPS
+     * Condi DPS
+     */
+
+    const tags = [];
+
+    let totalDamage = 0;
+    pathOr([], ['dpsTargets'])(player).forEach((target) => {
+
+        const targetStats = target[0];
+        totalDamage += targetStats.damage;
+    });
+
+    // Classed as a DPS if you do more than 9% of the total (aka pulling your share - with a small buffer)
+    if ((totalDamage / bossHealthLost) * 100 > 9) {
+        if (player.condition > 5) {
+            tags.push('Condi DPS');
+        }
+        else {
+            tags.push('Power DPS');
+        }
+    }
+
+    if (player.healing >= 5) {
+        tags.push('Healer');
+    }
+
+    if (player.toughness > 4) {
+        tags.push('Toughness');
     }
 
     const usefulBuffs = [
         'Quickness',
-        'Alacrity',
-        'Protection',
-        'Regeneration'
+        'Alacrity'
     ];
 
-    // If not lets see whether they generate any useful boons
-    player.groupBuffs.forEach((buff) => {
+    // Lets see whether they generate any useful boons
+    pathOr([], ['groupBuffs'])(player).forEach((buff) => {
 
         const totalGeneration = path(['buffData', 0, 'generation'])(buff);
         const buffDesc = buffMap['b' + buff.id];
 
         if (usefulBuffs.includes(buffDesc.name) && totalGeneration > 20) {
 
-            return 'Support';
+            tags.push(buffDesc.name);
+        }
+
+        if (buffDesc.name === 'Might' && totalGeneration > 5) {
+
+            tags.push(buffDesc.name);
         }
 
         // Maybe they are a banner warrior?
         if (player.profession === 'Warrior' || player.profession === 'Berserker' || player.profession === 'Spellbreaker') {
-            if (buffDesc.name === 'Banner of Strength' || buffDesc.name === 'Banner of Discipline') {
-                if (totalGeneration > 40) {
-                    return 'Banners';
+            if (buffDesc.name === 'Banner of Strength') {
+                if (totalGeneration > 20) {
+                    tags.push('Banner Slave');
                 }
             }
         }
     });
 
-    // No useful buffs too, they must be a dps
-    return 'DPS';
+    return tags;
 };
 
 const computeSimpleStats = function (player, buffMap) {
@@ -50,22 +85,17 @@ const computeSimpleStats = function (player, buffMap) {
     const returnObj = {
         totalDamage: path(['dpsAll', 0, 'damage'])(player),
         targetDPS: 0,
-        totalDPS: path(['dpsAll', 0, 'dps'])(player),
-        Might: undefined,
-        Quickness: undefined,
-        Alacrity: undefined,
-        Protectiion: undefined,
-        Regeneration: undefined
+        totalDPS: path(['dpsAll', 0, 'dps'])(player)
     };
 
-    player.dpsTargets.forEach((target) => {
+    pathOr([], ['dpsTargets'])(player).forEach((target) => {
 
         const targetStats = target[0];
         returnObj.targetDPS += targetStats.dps;
     });
 
     // populate the uptimes
-    player.buffUptimes.forEach((buff) => {
+    pathOr([], ['buffUptimes'])(player).forEach((buff) => {
 
         const buffDesc = buffMap['b' + buff.id];
 
@@ -90,12 +120,10 @@ const isExistingLog = async function (evtcJSON) {
     // Find any existing logs for this boss that this player is a part of
     const query = {
         bossName: evtcJSON.fightName,
-        uniqueChecking: {
-            recordedByList: [evtcJSON.recordedBy]
-        }
+        'uniqueChecking.recordedByList': evtcJSON.recordedBy
     };
 
-    const existingLogs = await mongoFind('encunters', query);
+    const existingLogs = await mongoFind('encounters', query);
 
     //loop through the existing logs and see if we have a match on the time boundries
     let exists = false;
@@ -107,13 +135,21 @@ const isExistingLog = async function (evtcJSON) {
         }
     });
 
+    console.log( exists );
     return exists;
+};
+
+const maybeProcessNewBoss = async function (evtcJSON) {
+
+    // TODO, see if redis has the bossName
+    // If not, add the name to redis, then create a doc in the 'bosses' collection
+    // Holds basic info like the fight icon etc
 };
 
 const processNewLog = async function (guildID, dpsReportUrl, evtcJSON) {
 
     const newEncounter = {
-        encounterId: Short.new(),
+        encounterId: Short().new(),
         uniqueChecking: {
             recordedByList: [],
             timeEndLowerBound: undefined,
@@ -125,14 +161,12 @@ const processNewLog = async function (guildID, dpsReportUrl, evtcJSON) {
         utcTimeEnd: undefined,
         success: undefined,
         players: [],
-        dpsReportUrl,
-        arcDpsRaw: undefined
+        dpsReportUrl
     };
 
     // Populate the new object
     try {
 
-        newEncounter.arcDpsRaw = evtcJSON;
         newEncounter.duration = path(['duration'])(evtcJSON);
         newEncounter.utcTimeEnd = new Date(evtcJSON.timeEnd);
         newEncounter.bossName = path(['fightName'])(evtcJSON);
@@ -143,6 +177,13 @@ const processNewLog = async function (guildID, dpsReportUrl, evtcJSON) {
         newEncounter.uniqueChecking.timeEndUpperBound = Moment(utcTimeEndMoment).add(8, 'seconds').toISOString();
 
         const players = path(['players'])(evtcJSON);
+
+        let totalBossHealthLost = 0;
+        evtcJSON.targets.forEach((target) => {
+
+            totalBossHealthLost += (target.totalHealth - target.finalHealth);
+        });
+
         for (let i = 0; i < players.length; ++i) {
 
             const player = players[i];
@@ -155,14 +196,18 @@ const processNewLog = async function (guildID, dpsReportUrl, evtcJSON) {
                 accountName: player.account,
                 profession: player.profession,
                 characterName: player.name,
-                role: computeRole(player, path(['buffMap'])(evtcJSON)),
+                roles: computeRoles(totalBossHealthLost, player, path(['buffMap'])(evtcJSON)),
                 simpleStats: computeSimpleStats(player, path(['buffMap'])(evtcJSON))
             };
             newEncounter.players.push(simplePlayer);
         }
 
-        // Add the log to the encounters collection
+        evtcJSON.gw2rbaEncounterId = newEncounter.encounterId;
+
+        // Add the log to the encounters collection and the evtcJSON to the evtc collection
         await mongoInsert('encounters', newEncounter);
+        await mongoInsert('evtc', evtcJSON);
+        return;
 
     }
     catch (err) {
@@ -177,6 +222,9 @@ const processExistingLog = async function (guildID, evtcJSON) {
     // Get the log from mongo
 
     // add the guildId to the guild Ids list if it is not already there
+    console.log( 'existing!!!!' );
+
+    return;
 };
 
 export const maybeProcessEncounter = async function (guildId, message) {
@@ -193,13 +241,16 @@ export const maybeProcessEncounter = async function (guildId, message) {
         }
     }
 
-    // Maybe we have dps reports in the message body we can process?
-    const dpsReportRegex = /https:\/\/dps\.report\/\S*-\d{8}-\d{6}_\w*/gm;
-    const matches = message.content.match(dpsReportRegex);
-    dpsReportUrls = dpsReportUrls.concat(matches);
+    if (message.content) {
+        // Maybe we have dps reports in the message body we can process?
+        const dpsReportRegex = /https:\/\/dps\.report\/\S*-\d{8}-\d{6}_\w*/gm;
+        const matches = message.content.match(dpsReportRegex) || [];
+        dpsReportUrls = dpsReportUrls.concat(matches);
+    }
 
     if (dpsReportUrls.length === 0) {
-        return;
+        console.log( 'No dps.report logs found. Returning' );
+        return 0;
     }
 
     for (let i = 0; i < dpsReportUrls.length; ++i) {
@@ -215,16 +266,19 @@ export const maybeProcessEncounter = async function (guildId, message) {
             });
             const evtcJSON = response.data;
 
-            if (response.code !== 200 || !evtcJSON || !evtcJSON.arcVersion) {
+            if (response.status !== 200 || !evtcJSON || !evtcJSON.arcVersion) {
                 throw new Error('Invalid encounter returned from dps.report api');
             }
 
             // Process the log
-            if (isExistingLog(evtcJSON)) {
-                processExistingLog(guildId, evtcJSON);
+            if (await isExistingLog(evtcJSON)) {
+                console.log( `Processing existing log with permalink: ${permalink}` );
+                await processExistingLog(guildId, evtcJSON);
             }
             else {
-                processNewLog(guildId, url, evtcJSON);
+                console.log( `Processing new log with permalink: ${permalink}` );
+                await maybeProcessNewBoss(evtcJSON);
+                await processNewLog(guildId, url, evtcJSON);
             }
         }
         catch (err) {
@@ -235,6 +289,5 @@ export const maybeProcessEncounter = async function (guildId, message) {
         }
     }
 
-    return true;
-
+    return dpsReportUrls.length;
 };

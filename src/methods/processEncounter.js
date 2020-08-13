@@ -1,5 +1,7 @@
-import { path, pathOr } from 'ramda';
-import { mongoFind, mongoInsert } from './mongo';
+import { path, pathOr, uniq } from 'ramda';
+import { mongoFind, mongoInsert, mongoUpdateById } from './mongo';
+
+import { config } from '../config';
 
 const Axios = require('axios');
 const Short = require('short-uuid');
@@ -9,7 +11,7 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
 
     // Tag List
     /**
-     * Support
+     * Healer
      * Toughness
      * Quickness
      * Alacrity
@@ -130,13 +132,16 @@ const isExistingLog = async function (evtcJSON) {
     existingLogs.forEach((encounter) => {
 
         const utcTimeEnd = Moment(new Date(evtcJSON.timeEnd));
+
         if (utcTimeEnd.isAfter(encounter.uniqueChecking.timeEndLowerBound) && utcTimeEnd.isBefore(encounter.uniqueChecking.timeEndUpperBound)) {
             exists = true;
         }
     });
 
-    console.log( exists );
-    return exists;
+    return {
+        exists,
+        encounter: existingLogs[0]
+    };
 };
 
 const maybeProcessNewBoss = async function (evtcJSON) {
@@ -217,12 +222,14 @@ const processNewLog = async function (guildID, dpsReportUrl, evtcJSON) {
     }
 };
 
-const processExistingLog = async function (guildID, evtcJSON) {
+const processExistingLog = async function (guildID, encounter) {
 
-    // Get the log from mongo
+    if (!encounter.guildIDs.includes(guildID)) {
 
-    // add the guildId to the guild Ids list if it is not already there
-    console.log( 'existing!!!!' );
+        encounter.guildIDs.push(guildID);
+        const newGuildIDList = uniq(encounter.guildIDs);
+        await mongoUpdateById('encounters', encounter._id, { guildIDs: newGuildIDList });
+    }
 
     return;
 };
@@ -259,10 +266,10 @@ export const maybeProcessEncounter = async function (guildId, message) {
         const permalink = url.substring(19);
 
         try {
-
+            const dpsReportBaseUrl = config.apis.dpsReport.baseUrl;
             const response = await Axios({
                 method: 'GET',
-                url: `https://dps.report/getJson?permalink=${permalink}`
+                url: `${dpsReportBaseUrl}/getJson?permalink=${permalink}`
             });
             const evtcJSON = response.data;
 
@@ -270,10 +277,12 @@ export const maybeProcessEncounter = async function (guildId, message) {
                 throw new Error('Invalid encounter returned from dps.report api');
             }
 
+            const existingLogStatus = await isExistingLog(evtcJSON);
+
             // Process the log
-            if (await isExistingLog(evtcJSON)) {
+            if (existingLogStatus.exists) {
                 console.log( `Processing existing log with permalink: ${permalink}` );
-                await processExistingLog(guildId, evtcJSON);
+                await processExistingLog(guildId, existingLogStatus.encounter);
             }
             else {
                 console.log( `Processing new log with permalink: ${permalink}` );
@@ -289,5 +298,6 @@ export const maybeProcessEncounter = async function (guildId, message) {
         }
     }
 
+    console.log( `Processed ${dpsReportUrls.length} Logs` );
     return dpsReportUrls.length;
 };

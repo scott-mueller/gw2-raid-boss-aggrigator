@@ -10,14 +10,80 @@ import { handleFullRaidReport } from '../commands/report';
 import { handleInitialPopulate } from './maintenance';
 
 import { maybeProcessEncounter } from './processEncounter';
+import { handleAccountAdd } from '../commands/player/account/add';
+import { handleAccountRemove } from '../commands/player/account/remove';
+import { handleAccountList } from '../commands/player/account/list';
+
+const _handlePlayerCommand = async function (args, user, userID, channelID, message, evt) {
+
+    if (args.length < 1) {
+        return;
+    }
+
+    if (args[0] === 'account') {
+
+        if (!args[1]) {
+            return;
+        }
+
+        switch (args[1]) {
+
+            // >player account add {api_key}
+            case 'add':
+
+                if (!args[2]) {
+                    return;
+                }
+
+                await handleAccountAdd(channelID, userID, evt.d.id, args[2]);
+                break;
+
+            case 'remove':
+
+                if (!args[2]) {
+                    return;
+                }
+
+                await handleAccountRemove(channelID, userID, args[2]);
+                break;
+
+            case 'list':
+
+                await handleAccountList(channelID, userID);
+                break;
+        }
+    }
+    else if (args[0] === 'summary') {
+        // handle player summary
+    }
+};
 
 export const handleMessage = async function (user, userID, channelID, message, evt) {
+
+    if (message.substring(0, 1) === '>') {
+
+        let args = message.substring(1).split(' ');
+        const baseCmd = args[0];
+        args = args.splice(1);
+
+        switch (baseCmd) {
+
+            case 'player':
+                _handlePlayerCommand(args, user, userID, channelID, message, evt);
+                break;
+
+            case 'stats':
+                break;
+
+            case 'stats-deep':
+                break;
+        }
+    }
 
     // No commands found. Maybe we have en encounter to process?
     const guildId = Server.bot.channels[channelID].guild_id;
     await maybeProcessEncounter(guildId, evt.d);
     return;
-
 
     // Our bot needs to know if it will execute a command
     // It will listen for messages that will start with `>`

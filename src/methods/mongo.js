@@ -23,6 +23,28 @@ export const mongoFind = function (collection, query) {
     });
 };
 
+export const mongoFindOne = function (collection, query) {
+
+    return new Promise( (resolve, reject) => {
+
+        const col = Server.db.collection(collection);
+
+        if (!col) {
+            return resolve([]);
+        }
+
+        col.findOne(query, (err, doc) => {
+
+            if (err) {
+                console.log( err );
+                return resolve([]);
+            }
+
+            return resolve(doc);
+        });
+    });
+};
+
 export const mongoInsert = function (collection, document) {
 
     return new Promise( (resolve, reject) => {

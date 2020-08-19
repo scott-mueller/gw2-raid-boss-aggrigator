@@ -5,7 +5,8 @@
     >guild remove {ID}
     >guild {ID} member add {accountName}
     >guild {ID} member remove {accountName}
-    >guild {ID} view
+    >guild {ID} roster
+    >guild {ID} grant-admin #user
 
 ### Player management Commands
     >player account add {apiKey}

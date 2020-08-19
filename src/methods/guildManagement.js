@@ -8,15 +8,20 @@ const generateId = customAlphabet('0123456789', 3);
 
 export const createGuild = async function (name, tag, userId, guildId) {
 
+    const returnObject = {
+        error: undefined,
+        result: undefined
+    };
+
     if (!name || !tag) {
-        return 'Invalid guild information recieved. Unable to add guild';
+        returnObject.error = 'Invalid guild information recieved. Unable to add guild';
     }
 
     // Does this guild already exist
     const guild = await mongoFindOne('guilds', { name, tag });
 
     if (guild) {
-        return `This guild is already registered. Use \`>guild view ${guild.reference}\` to view this guild`;
+        returnObject.error = `This guild is already registered. Use \`>guild ${guild.reference} roster\` to view this guild`;
     }
 
     const newGuild = {
@@ -27,14 +32,37 @@ export const createGuild = async function (name, tag, userId, guildId) {
         roster: [],
         adminList: [userId]
     };
+    returnObject.guild = newGuild;
 
     await mongoInsert('guilds', newGuild);
 
-    return `Guild: ${name} ${tag} created.\nThe following ID should be used to refer to it in future commands: ${newGuild.reference}`;
+    const serverConfig = await mongoFindOne('discord-servers', { serverId: guildId });
 
+    // New server - assign it as the default and return
+    if (!serverConfig) {
+        await mongoInsert('discord-servers', {
+            defaultGuildRef: newGuild.reference,
+            serverId: guildId
+        });
+
+        returnObject.result = 'SUCCESS_IS_DEFAULT';
+        return returnObject;
+    }
+
+    // Server already has a default
+    if (serverConfig.defaultGuildRef) {
+        returnObject.result = 'SUCCESS_NOT_DEFAULT';
+        return returnObject;
+    }
+
+    // Server exists but no guild
+    await mongoUpdateById('discord-servers', serverConfig._id, { defaultGuildRef: newGuild.reference });
+    returnObject.result = 'SUCCESS_IS_DEFAULT';
+
+    return returnObject;
 };
 
-export const addGuildMember = async function (userId, reference, accountName, ) {
+export const addGuildMember = async function (userId, reference, accountName) {
 
     // Get the guild
     const guild = await mongoFindOne('guilds', { reference });
@@ -48,7 +76,7 @@ export const addGuildMember = async function (userId, reference, accountName, ) 
     }
 
     if (guild.roster.includes(accountName)) {
-        return `${accountName} is already on the roster for ${guild.name} ${guild.tag}`;
+        return `${accountName} is already on the roster for __${guild.name} ${guild.tag}__`;
     }
 
     const newRoster = guild.roster;
@@ -61,7 +89,7 @@ export const addGuildMember = async function (userId, reference, accountName, ) 
     newGuildIds.push(guild._id);
     await mongoUpdateById('players', player._id, { guildIds: uniq(newGuildIds) });
 
-    return `${accountName} addeed to the roster for ${guild.name} ${guild.tag}`;
+    return `${accountName} added to the roster for __${guild.name} ${guild.tag}__`;
 };
 
 export const removeGuildMember = async function (userId, reference, accountName) {
@@ -70,26 +98,28 @@ export const removeGuildMember = async function (userId, reference, accountName)
 
 export const getGuildRoster = async function (guildId, reference) {
 
-    console.log( reference );
-
     // Get the guild
     const guild = await mongoFindOne('guilds', { reference });
 
+    const returnObject = {
+        error: undefined,
+        guild: undefined
+    };
+
     if (!guild) {
-        return 'The specified guild does not exist';
+        returnObject.error =  'The specified guild does not exist';
     }
 
     if (guildId !== guild.homeServerId) {
-        return 'You can only view a guild\'s roster on the server where the guild is based';
+        returnObject.error = 'You can only view a guild\'s roster on the server where the guild is based';
     }
 
-    let returnMessage = `**Guild roster for:** ${guild.name} ${guild.tag}\n`;
-    for (let i = 0; i < guild.roster.length; ++i) {
-
-        returnMessage += `${i + 1}: ${guild.roster[i]}\n`;
+    if (guild.roster.length === 0) {
+        returnObject.error = 'There are no players on this guild\'s roster';
     }
 
-    return returnMessage;
+    returnObject.guild = guild;
+    return returnObject;
 };
 
 export const changeGuildHomeServer = async function (newGuildId, reference) {
@@ -98,4 +128,25 @@ export const changeGuildHomeServer = async function (newGuildId, reference) {
 
 export const grantUserAdmin = async function (grantorUserId, granteeUserId, reference) {
 
+    // Get the guild
+    const guild = await mongoFindOne('guilds', { reference });
+
+    if (!guild) {
+        return 'The specified guild does not exist';
+    }
+
+    if (!guild.adminList.includes(grantorUserId)) {
+        return 'You do not have permission to grant another user admin';
+    }
+
+    if (guild.adminList.includes(granteeUserId)) {
+        return 'This user is already on the admin list for this guild';
+    }
+
+    const newAdminList = guild.adminList;
+    newAdminList.push(granteeUserId);
+
+    await mongoUpdateById('guilds', guild._id, { adminList: newAdminList });
+
+    return `Admin list for __${guild.name} ${guild.tag}__ Updated`;
 };

@@ -13,17 +13,34 @@ import { maybeProcessEncounter } from './processEncounter';
 import { handleAccountAdd } from '../commands/player/account/add';
 import { handleAccountRemove } from '../commands/player/account/remove';
 import { handleAccountList } from '../commands/player/account/list';
+
 import { handleGuildCreate } from '../commands/guild/create';
 import { handleGuildMemberAdd } from '../commands/guild/member/add';
 import { handleGuildViewRoster } from '../commands/guild/roster';
+import { handleGuildGrantAdmin } from '../commands/guild/grant-admin';
+import { mongoFindOne } from './mongo';
+
+const _appendGuildReferenceToBeginningOfArgs = async function (args, guildId) {
+
+    const referenceRegex = RegExp(/\[.{2,4}\]-\d{3}/);
+    if (referenceRegex.test(args[0])) {
+        return args;
+    }
+
+    const serverConfig = await mongoFindOne('discord-servers', { serverId: guildId });
+
+    if (!serverConfig) {
+        return undefined;
+    }
+
+    const newArgs = args;
+    args.unshift(serverConfig.defaultGuildRef);
+    return newArgs;
+};
 
 const _handleGuildCommand = async function (args, userID, channelID) {
 
     const guildId = Server.bot.channels[channelID].guild_id;
-
-    if (args.length < 1) {
-        return;
-    }
 
     if (args[0] === 'create') {
 
@@ -33,23 +50,49 @@ const _handleGuildCommand = async function (args, userID, channelID) {
         return;
     }
 
-    if (args[0] === 'remove') {
+    if (args[0] === 'delete') {
+
+        // TODO
         return;
     }
 
-    // Assume args[0] is a reference
+    const argsWithReference = await _appendGuildReferenceToBeginningOfArgs(args, guildId);
 
-    if (args[1] === 'member') {
-
-        if (args[2] === 'add') {
-            await handleGuildMemberAdd(channelID, userID, args[0], args[3]);
-        }
+    if (!argsWithReference) {
+        Server.bot.sendMessage({
+            to: channelID,
+            message: 'No reference passed and unable to locate a default reference for this guild.\n You may need to create a guild first'
+        });
+        return;
     }
 
-    if (args[1] === 'roster') {
-        await handleGuildViewRoster(channelID, guildId, args[0]);
-    }
+    switch (args[1]) {
 
+        case 'member':
+            if (args[2] === 'add') {
+                const accountName = args.slice(3).join(' ');
+                await handleGuildMemberAdd(channelID, userID, args[0], accountName);
+                break;
+            }
+            // remove
+
+            break;
+
+        case 'roster':
+            await handleGuildViewRoster(channelID, guildId, args[0]);
+            break;
+
+        case 'grant-admin':
+            await handleGuildGrantAdmin(channelID, guildId, args[0], userID, args[2]);
+            break;
+
+        default:
+            Server.bot.sendMessage({
+                to: channelID,
+                message: 'Unknown guild command'
+            });
+            break;
+    }
 };
 
 const _handlePlayerCommand = async function (args, user, userID, channelID, message, evt) {
@@ -208,7 +251,7 @@ export const handleMessage = async function (user, userID, channelID, message, e
 
             case 'player-summary':
                 Server.bot.simulateTyping(channelID);
-                handlePlayerSummary(args, channelID);
+                //handlePlayerSummary(args, channelID);
                 break;
 
             case 'stats-deep':

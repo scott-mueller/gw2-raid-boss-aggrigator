@@ -4,9 +4,9 @@ export const config = {
         token: process.env.AUTH_TOKEN || 'NzMwNTQ5NDg5MjAyMzY0NDE2.XwaULQ.BmihWlz-lmk--pkRGKfa84bw8Iw'
     },
 
-    maintenanceUsers: [
-
-    ],
+    idGeneration: {
+        alphabet: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+    },
 
     mongo: {
         url: 'mongodb://192.168.99.1:27017',

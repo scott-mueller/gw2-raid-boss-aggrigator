@@ -1,11 +1,32 @@
 import { path, pathOr, uniq } from 'ramda';
-import { mongoFind, mongoInsert, mongoUpdateById } from './mongo';
+import { mongoFind, mongoInsert, mongoFindOne } from './mongo';
+import { getOrCreatePlayer } from './users';
 
 import { config } from '../config';
 
+import { customAlphabet } from 'nanoid';
+
+const generateId = customAlphabet(config.idGeneration.alphabet, 8);
+
 const Axios = require('axios');
-const Short = require('short-uuid');
 const Moment = require('moment-timezone');
+
+const buildPlayerMechanicObject = function (mechanicData, characterName, accountName) {
+
+    const playerMechanicData = {
+        player: accountName,
+        occurrences: []
+    };
+
+    mechanicData.forEach((occurrence) => {
+
+        if (occurrence.actor === characterName) {
+            playerMechanicData.occurrences.push(occurrence.time);
+        }
+    });
+
+    return playerMechanicData;
+};
 
 const computeRoles = function (bossHealthLost, player, buffMap) {
 
@@ -117,6 +138,54 @@ const computeSimpleStats = function (player, buffMap) {
     return returnObj;
 };
 
+const determineFirstMechanicOccurrence = function (mechanicsData) {
+
+    let first = 9999999999;
+    let firstActor;
+    mechanicsData.forEach((occurrence) => {
+
+        if (occurrence.time < first) {
+            first = occurrence.time;
+            firstActor = occurrence.actor;
+        }
+    });
+
+    return firstActor;
+};
+
+const determineMechanicsIndex = function (logMechanics, mechanicName) {
+
+    for (let i = 0; i < logMechanics.length; ++i) {
+        const mechanic = logMechanics[i];
+
+        if (mechanic.name.toLowerCase() === mechanicName.toLowerCase()) {
+            return i;
+        }
+    }
+
+    return false;
+};
+
+const doesEncounterMatchGuildRoster = async function (guildId, accountNames) {
+
+    const guild = await mongoFindOne('guilds', { _id: guildId });
+    if (!guild) {
+        console.log( `Unable to find guild with id: ${guildId}` );
+        return false;
+    }
+
+    let matchCount = 0;
+    accountNames.forEach((name) => {
+
+        if (guild.roster.includes(name)) {
+            matchCount++;
+        }
+    });
+
+    return matchCount >= 8;
+
+};
+
 const isExistingLog = async function (evtcJSON) {
 
     // Find any existing logs for this boss that this player is a part of
@@ -151,37 +220,35 @@ const maybeProcessNewBoss = async function (evtcJSON) {
     // Holds basic info like the fight icon etc
 };
 
-const processNewLog = async function (guildID, dpsReportUrl, evtcJSON) {
+const processNewLog = async function (dpsReportUrl, evtcJSON) {
 
     const newEncounter = {
-        encounterId: Short().new(),
+        encounterId: generateId(),
         uniqueChecking: {
             recordedByList: [],
             timeEndLowerBound: undefined,
             timeEndUpperBound: undefined
         },
-        guildIDs: [guildID],
-        bossName: '',
-        duration: '',
-        utcTimeEnd: undefined,
-        success: undefined,
+        accountNames: [],
+        guildIDs: [],
+        bossName: path(['fightName'])(evtcJSON),
+        duration: path(['duration'])(evtcJSON),
+        utcTimeEnd: new Date(evtcJSON.timeEnd),
+        success: path(['success'])(evtcJSON),
         players: [],
-        dpsReportUrl
+        dpsReportUrl,
+        downs: [],
+        deaths: [],
+        firstDeath: undefined,
+        firstDown: undefined
     };
 
     // Populate the new object
     try {
 
-        newEncounter.duration = path(['duration'])(evtcJSON);
-        newEncounter.utcTimeEnd = new Date(evtcJSON.timeEnd);
-        newEncounter.bossName = path(['fightName'])(evtcJSON);
-        newEncounter.success = path(['success'])(evtcJSON);
-
         const utcTimeEndMoment = Moment(new Date(evtcJSON.timeEnd)).utc();
         newEncounter.uniqueChecking.timeEndLowerBound = Moment(utcTimeEndMoment).subtract(8, 'seconds').toISOString();
         newEncounter.uniqueChecking.timeEndUpperBound = Moment(utcTimeEndMoment).add(8, 'seconds').toISOString();
-
-        const players = path(['players'])(evtcJSON);
 
         let totalBossHealthLost = 0;
         evtcJSON.targets.forEach((target) => {
@@ -189,15 +256,39 @@ const processNewLog = async function (guildID, dpsReportUrl, evtcJSON) {
             totalBossHealthLost += (target.totalHealth - target.finalHealth);
         });
 
+        const deathIndex = determineMechanicsIndex(evtcJSON.mechanics, 'Dead');
+        const deaths = pathOr([], ['mechanics', deathIndex, 'mechanicsData'])(evtcJSON);
+        newEncounter.firstDeath = determineFirstMechanicOccurrence(deaths);
+
+        const downedIndex = determineMechanicsIndex(evtcJSON.mechanics, 'Downed');
+        const downs = pathOr([], ['mechanics', downedIndex, 'mechanicsData'])(evtcJSON);
+        newEncounter.firstDown = determineFirstMechanicOccurrence(downs);
+
+        let guildIds = [];
+
+        const players = path(['players'])(evtcJSON);
         for (let i = 0; i < players.length; ++i) {
 
             const player = players[i];
 
+            const storedPlayer = await getOrCreatePlayer(player.account);
+            guildIds = guildIds.concat(storedPlayer.guildIds);
+
             newEncounter.uniqueChecking.recordedByList.push(player.name);
+            newEncounter.accountNames.push(player.account);
+            newEncounter.downs.push(buildPlayerMechanicObject(downs, player.name, player.account));
+            newEncounter.deaths.push(buildPlayerMechanicObject(deaths, player.name, player.account));
+
+            if (newEncounter.firstDeath && newEncounter.firstDeath === player.name) {
+                newEncounter.firstDeath = player.account;
+            }
+
+            if (newEncounter.firstDown && newEncounter.firstDown === player.name) {
+                newEncounter.firstDown = player.account;
+            }
 
             const simplePlayer = {
                 subgroup: player.group,
-                icon: await mongoFind('icons', player.profession),
                 accountName: player.account,
                 profession: player.profession,
                 characterName: player.name,
@@ -205,6 +296,14 @@ const processNewLog = async function (guildID, dpsReportUrl, evtcJSON) {
                 simpleStats: computeSimpleStats(player, path(['buffMap'])(evtcJSON))
             };
             newEncounter.players.push(simplePlayer);
+        }
+
+        const uniqueGuildIds = uniq(guildIds);
+        for (let i = 0; i < uniqueGuildIds.length; ++i) {
+
+            if (await doesEncounterMatchGuildRoster(uniqueGuildIds[i], newEncounter.accountNames)) {
+                newEncounter.guildIDs.push(uniqueGuildIds[i]);
+            }
         }
 
         evtcJSON.gw2rbaEncounterId = newEncounter.encounterId;
@@ -220,18 +319,6 @@ const processNewLog = async function (guildID, dpsReportUrl, evtcJSON) {
         console.log( err );
         return;
     }
-};
-
-const processExistingLog = async function (guildID, encounter) {
-
-    if (!encounter.guildIDs.includes(guildID)) {
-
-        encounter.guildIDs.push(guildID);
-        const newGuildIDList = uniq(encounter.guildIDs);
-        await mongoUpdateById('encounters', encounter._id, { guildIDs: newGuildIDList });
-    }
-
-    return;
 };
 
 export const maybeProcessEncounter = async function (guildId, message) {
@@ -256,7 +343,7 @@ export const maybeProcessEncounter = async function (guildId, message) {
     }
 
     if (dpsReportUrls.length === 0) {
-        console.log( 'No dps.report logs found. Returning' );
+        console.log( 'No dps.report logs found' );
         return 0;
     }
 
@@ -281,13 +368,12 @@ export const maybeProcessEncounter = async function (guildId, message) {
 
             // Process the log
             if (existingLogStatus.exists) {
-                console.log( `Processing existing log with permalink: ${permalink}` );
-                await processExistingLog(guildId, existingLogStatus.encounter);
+                console.log( `Log already captured for permalink: ${permalink}` );
             }
             else {
                 console.log( `Processing new log with permalink: ${permalink}` );
                 await maybeProcessNewBoss(evtcJSON);
-                await processNewLog(guildId, url, evtcJSON);
+                await processNewLog(url, evtcJSON);
             }
         }
         catch (err) {

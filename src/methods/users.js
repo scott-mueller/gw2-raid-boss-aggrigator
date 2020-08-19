@@ -1,8 +1,7 @@
-import { pathOr, filter } from 'ramda';
+import { path, pathOr, filter, unfold } from 'ramda';
 
-import { mongoFindOne, mongoUpdateById, mongoInsert } from './mongo';
+import { mongoFindOne, mongoUpdateById, mongoInsert, mongoFind } from './mongo';
 import { getGW2Account } from './GW2Api';
-import { useFakeXMLHttpRequest } from 'sinon';
 
 const Moment = require('moment-timezone');
 
@@ -24,53 +23,22 @@ export const addGW2Account = async function (userId, apiKey) {
         return `A problem occoured while contacting the guild wars 2 api. Please try again later.`;
     }
 
-    // Try to find an existing record for this user
-    const query = {
-        userId
+    // Call getOrCreatePlayer for this accountName
+    const playerRecord = await getOrCreatePlayer(account.data.name);
+
+    if (playerRecord.verification) {
+        return 'This account has already been registered. Use `>player account list` to list all registered accounts';
+    }
+
+    // Add a verification object to the result
+    const verification = {
+        apiKey,
+        userId,
+        storedAt: new Date()
     };
-    const user = await mongoFindOne('discord-users', query);
 
-    if (user) {
-
-        let found = false;
-
-        pathOr([], ['verifiedAccounts'])(user).forEach((verifiedAccount) => {
-
-            if (verifiedAccount.accountName === account.data.name) {
-                found = true;
-            }
-        });
-
-        if (!found) {
-
-            const newVerifiedAccounts = user.verifiedAccounts || [];
-            newVerifiedAccounts.push({
-                apiKey,
-                accountName: account.data.name,
-                storedAt: new Date()
-            });
-
-            await mongoUpdateById('discord-users', user._id, { verifiedAccounts: newVerifiedAccounts });
-        }
-        else {
-            return 'This account has already been registered. Use `>player account list` to list all registered accounts';
-        }
-    }
-    else {
-
-        const newUser = {
-            userId,
-            verifiedAccounts: [
-                {
-                    apiKey,
-                    accountName: account.data.name,
-                    storedAt: new Date()
-                }
-            ]
-        };
-
-        await mongoInsert('discord-users', newUser);
-    }
+    // Update the doc
+    await mongoUpdateById('players', playerRecord._id, { verification });
 
     return `Key verified for Account: \`${account.data.name}\``;
 };
@@ -79,55 +47,56 @@ export const removeGW2Account = async function (userId, accountName) {
 
     // Try to find an existing record for this user
     const query = {
-        userId
+        'verification.userId': userId,
+        accountName
     };
-    const user = await mongoFindOne('discord-users', query);
+    const playerRecord = await mongoFindOne('players', query);
 
-    if (user && user.verifiedAccounts && user.verifiedAccounts.length > 0) {
-
-        const newVerifiedAccounts = filter((account) => {
-
-            if (account.accountName === accountName) {
-                return false;
-            }
-
-            return true;
-        }, user.verifiedAccounts);
-
-        await mongoUpdateById('discord-users', user._id, { verifiedAccounts: newVerifiedAccounts });
-
-        return `${accountName} has been removed`;
+    if (!playerRecord) {
+        return 'This account is not registered';
     }
 
-    return 'No Guild Wars 2 accounts were found';
+    delete playerRecord.verification;
 
+    await mongoUpdateById('players', playerRecord._id, { verification: undefined });
+
+    return `${accountName} has been removed`;
 };
 
 export const viewVerifiedAccounts = async function (userId) {
 
-    // Try to find an existing record for this user
-    const query = {
-        userId
-    };
-    const user = await mongoFindOne('discord-users', query);
+    const playerRecords = await mongoFind('players', { 'verification.userId': userId });
 
-    if (user) {
-
-        if (!user.verifiedAccounts || user.verifiedAccounts.length === 0) {
-            return 'You have not added any Guild Wars 2 Api Keys. Use `>player account add {apiKey}` to add one';
-        }
-
-        let returnMessage = '**Registered Accounts:**\n';
-        for (let i = 0; i < user.verifiedAccounts.length; ++i) {
-
-            const acc = user.verifiedAccounts[i];
-
-            const formattedAccountAge = Moment(acc.storedAt).format('MMM Do YYYY');
-
-            returnMessage += `${i + 1}: ${acc.accountName},             Stored: ${formattedAccountAge}\n`;
-        }
-
-        return returnMessage;
+    if (playerRecords.length === 0) {
+        return 'You have not added any Guild Wars 2 Api Keys. Use `>player account add {apiKey}` to add one';
     }
+
+    let returnMessage = '**Registered Accounts:**\n';
+    for (let i = 0; i < playerRecords.length; ++i) {
+
+        const record = playerRecords[i];
+
+        const formattedAccountAge = Moment(record.verification.storedAt).format('MMM Do YYYY');
+
+        returnMessage += `${i + 1}: ${record.accountName},             Stored: ${formattedAccountAge}\n`;
+    }
+
+    return returnMessage;
 };
 
+export const getOrCreatePlayer = async function (accountName) {
+
+    let player = await mongoFindOne('players', { accountName });
+
+    if (!player) {
+        const newPlayer = {
+            accountName,
+            guildIds: []
+        };
+
+        const result = await mongoInsert('players', newPlayer);
+        player = pathOr(newPlayer, ['ops', 0])(result);
+    }
+
+    return player;
+};

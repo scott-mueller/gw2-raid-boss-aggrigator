@@ -13,6 +13,44 @@ import { maybeProcessEncounter } from './processEncounter';
 import { handleAccountAdd } from '../commands/player/account/add';
 import { handleAccountRemove } from '../commands/player/account/remove';
 import { handleAccountList } from '../commands/player/account/list';
+import { handleGuildCreate } from '../commands/guild/create';
+import { handleGuildMemberAdd } from '../commands/guild/member/add';
+import { handleGuildViewRoster } from '../commands/guild/roster';
+
+const _handleGuildCommand = async function (args, userID, channelID) {
+
+    const guildId = Server.bot.channels[channelID].guild_id;
+
+    if (args.length < 1) {
+        return;
+    }
+
+    if (args[0] === 'create') {
+
+        const name = args.slice(1, args.length - 1).join(' ');
+        const tag = args[args.length - 1];
+        await handleGuildCreate(channelID, userID, name, tag, guildId);
+        return;
+    }
+
+    if (args[0] === 'remove') {
+        return;
+    }
+
+    // Assume args[0] is a reference
+
+    if (args[1] === 'member') {
+
+        if (args[2] === 'add') {
+            await handleGuildMemberAdd(channelID, userID, args[0], args[3]);
+        }
+    }
+
+    if (args[1] === 'roster') {
+        await handleGuildViewRoster(channelID, guildId, args[0]);
+    }
+
+};
 
 const _handlePlayerCommand = async function (args, user, userID, channelID, message, evt) {
 
@@ -72,10 +110,14 @@ export const handleMessage = async function (user, userID, channelID, message, e
                 _handlePlayerCommand(args, user, userID, channelID, message, evt);
                 break;
 
-            case 'stats':
+            case 'guild':
+                _handleGuildCommand(args, userID, channelID);
                 break;
 
             case 'stats-deep':
+                break;
+
+            case 'quick-start':
                 break;
         }
     }

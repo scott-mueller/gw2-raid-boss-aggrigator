@@ -68,7 +68,7 @@ export const mongoInsert = function (collection, document) {
     });
 };
 
-export const mongoUpdateById = function (collection, id, updateFields) {
+export const mongoUpdateById = function (collection, id, setFields, unsetFields = {}) {
 
     return new Promise( (resolve, reject) => {
 
@@ -81,7 +81,8 @@ export const mongoUpdateById = function (collection, id, updateFields) {
 
         col.updateOne(
             { _id: id },
-            { $set: updateFields },
+            { $set: setFields },
+            { $unset: unsetFields },
             (err, result) => {
 
                 if (err) {

@@ -19,6 +19,7 @@ import { handleGuildMemberAdd } from '../commands/guild/member/add';
 import { handleGuildViewRoster } from '../commands/guild/roster';
 import { handleGuildGrantAdmin } from '../commands/guild/grant-admin';
 import { mongoFindOne } from './mongo';
+import { handleStatsDeep } from '../commands/stats/deep';
 
 const _appendGuildReferenceToBeginningOfArgs = async function (args, guildId) {
 
@@ -128,7 +129,7 @@ const _handlePlayerCommand = async function (args, user, userID, channelID, mess
                 await handleAccountRemove(channelID, userID, args[2]);
                 break;
 
-            case 'list':
+            case 'view':
 
                 await handleAccountList(channelID, userID);
                 break;
@@ -136,6 +137,19 @@ const _handlePlayerCommand = async function (args, user, userID, channelID, mess
     }
     else if (args[0] === 'summary') {
         // handle player summary
+    }
+};
+
+const _handleStatsCommand = async function (args, userID, channelID) {
+
+    const guildId = Server.bot.channels[channelID].guild_id;
+
+    if (args[0] === 'deep') {
+        const bossName = args.slice(1).join(' ');
+
+        const argsWithReference = await _appendGuildReferenceToBeginningOfArgs(args, guildId);
+
+        await handleStatsDeep(channelID, argsWithReference[0], bossName );
     }
 };
 
@@ -157,7 +171,8 @@ export const handleMessage = async function (user, userID, channelID, message, e
                 _handleGuildCommand(args, userID, channelID);
                 break;
 
-            case 'stats-deep':
+            case 'stats':
+                _handleStatsCommand(args, userID, channelID);
                 break;
 
             case 'quick-start':

@@ -34,7 +34,8 @@ export const addGW2Account = async function (userId, apiKey) {
     const verification = {
         apiKey,
         userId,
-        storedAt: new Date()
+        storedAt: new Date(),
+        accountCreatedAt: new Date(account.created)
     };
 
     // Update the doc
@@ -65,23 +66,20 @@ export const removeGW2Account = async function (userId, accountName) {
 
 export const viewVerifiedAccounts = async function (userId) {
 
+    const returnObject = {
+        error: undefined,
+        players: undefined
+    };
+
     const playerRecords = await mongoFind('players', { 'verification.userId': userId });
 
     if (playerRecords.length === 0) {
-        return 'You have not added any Guild Wars 2 Api Keys. Use `>player account add {apiKey}` to add one';
+        returnObject.error = 'You have not added any Guild Wars 2 Api Keys. Use `>player account add {apiKey}` to add one';
+        return returnObject;
     }
 
-    let returnMessage = '**Registered Accounts:**\n';
-    for (let i = 0; i < playerRecords.length; ++i) {
-
-        const record = playerRecords[i];
-
-        const formattedAccountAge = Moment(record.verification.storedAt).format('MMM Do YYYY');
-
-        returnMessage += `${i + 1}: ${record.accountName},             Stored: ${formattedAccountAge}\n`;
-    }
-
-    return returnMessage;
+    returnObject.players = playerRecords;
+    return returnObject;
 };
 
 export const getOrCreatePlayer = async function (accountName) {

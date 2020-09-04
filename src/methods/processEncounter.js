@@ -1,31 +1,43 @@
+/* eslint-disable no-extend-native */
 import { path, pathOr, uniq } from 'ramda';
 import { mongoFind, mongoInsert, mongoFindOne } from './mongo';
 import { getOrCreatePlayer } from './users';
-
 import { config } from '../config';
-
 import { customAlphabet } from 'nanoid';
-
-const generateId = customAlphabet(config.idGeneration.alphabet, 8);
 
 const Axios = require('axios');
 const Moment = require('moment-timezone');
 
-const buildPlayerMechanicObject = function (mechanicData, characterName, accountName) {
+const generateId = customAlphabet(config.idGeneration.alphabet, 8);
 
-    const playerMechanicData = {
-        player: accountName,
-        occurrences: []
-    };
+String.prototype.convertToMs = function () {
+
+    const inputStr = this.valueOf();
+
+    const regex = RegExp(/\d{2}m \d{2}s \d{3}ms/);
+    if (!regex.test(inputStr)) {
+        throw new TypeError('Incorrect duration format. String must be in format \'XXm YYs ZZZms\'')
+    }
+
+    const minComp = parseInt(inputStr.substring(0, 2));
+    const secComp = parseInt(inputStr.substring(4, 6));
+    const msComp = parseInt(inputStr.substring(8, 11));
+
+    return (minComp * 60000) + (secComp * 1000) + msComp;
+};
+
+const buildPlayerMechanicArray = function (mechanicData, characterName, accountName) {
+
+    const occurrences = [];
 
     mechanicData.forEach((occurrence) => {
 
         if (occurrence.actor === characterName) {
-            playerMechanicData.occurrences.push(occurrence.time);
+            occurrences.push(occurrence.time);
         }
     });
 
-    return playerMechanicData;
+    return occurrences;
 };
 
 const computeRoles = function (bossHealthLost, player, buffMap) {
@@ -74,7 +86,7 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
         'Alacrity'
     ];
 
-    // Lets see whether they generate any useful boons
+    // Lets see whether they generate any useful boons for their subgroup
     pathOr([], ['groupBuffs'])(player).forEach((buff) => {
 
         const totalGeneration = path(['buffData', 0, 'generation'])(buff);
@@ -100,12 +112,38 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
         }
     });
 
-    return tags;
+    // Lets see whether they generate any useful boons for the squad (own subgroup)
+    pathOr([], ['squadBuffs'])(player).forEach((buff) => {
+
+        const totalGeneration = path(['buffData', 0, 'generation'])(buff);
+        const buffDesc = buffMap['b' + buff.id];
+
+        if (usefulBuffs.includes(buffDesc.name) && totalGeneration > 20) {
+
+            tags.push(buffDesc.name);
+        }
+
+        if (buffDesc.name === 'Might' && totalGeneration > 5) {
+
+            tags.push(buffDesc.name);
+        }
+
+        // Maybe they are a banner warrior?
+        if (player.profession === 'Warrior' || player.profession === 'Berserker' || player.profession === 'Spellbreaker') {
+            if (buffDesc.name === 'Banner of Strength') {
+                if (totalGeneration > 20) {
+                    tags.push('Banner Slave');
+                }
+            }
+        }
+    });
+
+    return uniq(tags);
 };
 
-const computeSimpleStats = function (player, buffMap) {
+const computeDmgStats = function (player) {
 
-    const returnObj = {
+    const returnObject = {
         totalDamage: path(['dpsAll', 0, 'damage'])(player),
         targetDPS: 0,
         totalDPS: path(['dpsAll', 0, 'dps'])(player)
@@ -114,8 +152,15 @@ const computeSimpleStats = function (player, buffMap) {
     pathOr([], ['dpsTargets'])(player).forEach((target) => {
 
         const targetStats = target[0];
-        returnObj.targetDPS += targetStats.dps;
+        returnObject.targetDPS += targetStats.dps;
     });
+
+    return returnObject;
+};
+
+const computeBoonUptimes = function (player, buffMap) {
+
+    const returnObject = {};
 
     // populate the uptimes
     pathOr([], ['buffUptimes'])(player).forEach((buff) => {
@@ -127,15 +172,17 @@ const computeSimpleStats = function (player, buffMap) {
             'Quickness',
             'Alacrity',
             'Protection',
-            'Regeneration'
+            'Regeneration',
+            'Fury',
+            'Vigor'
         ];
 
         if (displayBuffs.includes(buffDesc.name)) {
-            returnObj[buffDesc.name] = buff.buffData[0].uptime;
+            returnObject[buffDesc.name] = buff.buffData[0].uptime;
         }
     });
 
-    return returnObj;
+    return returnObject;
 };
 
 const determineFirstMechanicOccurrence = function (mechanicsData) {
@@ -230,15 +277,14 @@ const processNewLog = async function (dpsReportUrl, evtcJSON) {
             timeEndUpperBound: undefined
         },
         accountNames: [],
-        guildIDs: [],
+        guildIds: [],
         bossName: path(['fightName'])(evtcJSON),
         duration: path(['duration'])(evtcJSON),
+        durationMs: path(['duration'])(evtcJSON).convertToMs(),
         utcTimeEnd: new Date(evtcJSON.timeEnd),
         success: path(['success'])(evtcJSON),
         players: [],
         dpsReportUrl,
-        downs: [],
-        deaths: [],
         firstDeath: undefined,
         firstDown: undefined
     };
@@ -276,8 +322,6 @@ const processNewLog = async function (dpsReportUrl, evtcJSON) {
 
             newEncounter.uniqueChecking.recordedByList.push(player.name);
             newEncounter.accountNames.push(player.account);
-            newEncounter.downs.push(buildPlayerMechanicObject(downs, player.name, player.account));
-            newEncounter.deaths.push(buildPlayerMechanicObject(deaths, player.name, player.account));
 
             if (newEncounter.firstDeath && newEncounter.firstDeath === player.name) {
                 newEncounter.firstDeath = player.account;
@@ -292,8 +336,26 @@ const processNewLog = async function (dpsReportUrl, evtcJSON) {
                 accountName: player.account,
                 profession: player.profession,
                 characterName: player.name,
+                dmgStats: computeDmgStats(player, path(['buffMap'])(evtcJSON)),
+                booonUptimes: computeBoonUptimes(player, path(['buffMap'])(evtcJSON)),
+                defensiveStats: {
+                    downs: buildPlayerMechanicArray(downs, player.name, player.account),
+                    deaths: buildPlayerMechanicArray(deaths, player.name, player.account),
+                    damageTaken: path(['defenses', '0', 'damageTaken'])(player)
+                },
+                supportStats: {
+                    revives: pathOr(0, ['support', '0', 'resurrects'])(player),
+                    reviveTimes: pathOr(0, ['support', '0', 'resurrectTime'])(player),
+                    outgoingCondiCleanse: pathOr(0, ['support', '0', 'condiCleanse'])(player),
+                    boonStrips: pathOr(0, ['support', '0', 'boonStrips'])(player)
+                },
                 roles: computeRoles(totalBossHealthLost, player, path(['buffMap'])(evtcJSON)),
-                simpleStats: computeSimpleStats(player, path(['buffMap'])(evtcJSON))
+                simpleStats: {
+                    condition: player.condition,
+                    concentration: player.concentration,
+                    healing: player.healing,
+                    toughness: player.toughness
+                }
             };
             newEncounter.players.push(simplePlayer);
         }
@@ -302,7 +364,7 @@ const processNewLog = async function (dpsReportUrl, evtcJSON) {
         for (let i = 0; i < uniqueGuildIds.length; ++i) {
 
             if (await doesEncounterMatchGuildRoster(uniqueGuildIds[i], newEncounter.accountNames)) {
-                newEncounter.guildIDs.push(uniqueGuildIds[i]);
+                newEncounter.guildIds.push(uniqueGuildIds[i]);
             }
         }
 

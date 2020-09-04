@@ -337,7 +337,7 @@ const processNewLog = async function (dpsReportUrl, evtcJSON) {
                 profession: player.profession,
                 characterName: player.name,
                 dmgStats: computeDmgStats(player, path(['buffMap'])(evtcJSON)),
-                booonUptimes: computeBoonUptimes(player, path(['buffMap'])(evtcJSON)),
+                boonUptimes: computeBoonUptimes(player, path(['buffMap'])(evtcJSON)),
                 defensiveStats: {
                     downs: buildPlayerMechanicArray(downs, player.name, player.account),
                     deaths: buildPlayerMechanicArray(deaths, player.name, player.account),

@@ -1,0 +1,1 @@
+// Lists all the avaliable bosses you can query - full names so you can copy/paste

@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node bootstrap.js",
     "debug": "nodemon --inspect=4500 bootstrap.js",
-    "test": "APP_ENVIRONMENT=TEST npx nyc jasmine"
+    "test": "APP_ENVIRONMENT=TEST npx nyc jasmine",
+    "google-auth": "node googleAuth.js"
   },
   "author": "Scott Mueller (scott.mueller12@hotmail.com)",
   "license": "ISC",
@@ -20,6 +21,8 @@
     "babel-preset-env": "^1.7.0",
     "chai": "^4.2.0",
     "discord.io": "https://github.com/woor/discord.io/tarball/gateway_v6",
+    "discord.js": "^12.3.1",
+    "googleapis": "^39.2.0",
     "jasmine": "^3.6.1",
     "moment": "^2.27.0",
     "moment-timezone": "^0.5.31",

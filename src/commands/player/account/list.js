@@ -1,17 +1,15 @@
 import { viewVerifiedAccounts } from '../../../methods/users';
-import { Server } from '../../../server';
+const Discord = require('discord.js');
 
-export const handleAccountList = async function (channelId, userId) {
+export const handleAccountList = async function (channel, userId) {
 
-    Server.bot.simulateTyping(channelId);
+    channel.startTyping();
 
     const response = await viewVerifiedAccounts(userId);
 
     if (response.error) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: response.error
-        });
+        channel.send(response.error);
+        channel.stopTyping();
     }
 
     let accountsString;
@@ -20,28 +18,24 @@ export const handleAccountList = async function (channelId, userId) {
         accountsString += `${i + 1} ${player.accountName}`;
     }
 
-    const embed = {
-        title: `**Player Details**`,
-        description: '',
-        color: 4688353,
-        fields: [
-            {
-                name: 'Accounts',
-                value: accountsString
-            },
-            {
-                name: 'Guilds',
-                value: guildsString
-            }
-        ]
-    };
+    const embed = new Discord.MessageEmbed();
+    embed.setTitle(`**Player Details**`);
+    embed.setColor(4688353);
+    embed.addFields(
+        {
+            name: 'Accounts',
+            value: accountsString
+        },
+        {
+            name: 'Guilds',
+            value: 'TODO'
+        }
+    );
 
-    Server.bot.sendMessage({
-        to: channelId,
-        embed
-    });
+    channel.send(embed);
+    channel.stopTyping();
 
-    let returnMessage = '**Registered Accounts:**\n';
+    /*let returnMessage = '**Registered Accounts:**\n';
     for (let i = 0; i < playerRecords.length; ++i) {
 
         const record = playerRecords[i];
@@ -49,7 +43,7 @@ export const handleAccountList = async function (channelId, userId) {
         const formattedAccountAge = Moment(record.verification.storedAt).format('MMM Do YYYY');
 
         returnMessage += `${i + 1}: ${record.accountName},             Stored: ${formattedAccountAge}\n`;
-    }
+    }*/
 
 
 

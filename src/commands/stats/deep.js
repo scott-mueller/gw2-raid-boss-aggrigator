@@ -1,11 +1,7 @@
 /* eslint-disable no-extend-native */
-import { Server } from '../../server';
 import { mongoFind, mongoFindOne } from '../../methods/mongo';
-import { saveFile } from '../../methods/googleApi/googleapi';
 import { generatePlayerStatsImage } from '../../methods/canvas/playerStatsImage';
-
-const fs = require('fs');
-const {google} = require('googleapis');
+const Discord = require('discord.js');
 
 String.prototype.padding = function (n, c) {
 
@@ -415,22 +411,23 @@ const buildDownDeathStatsString = function (processedEncounterJSON) {
 
 const getPlayerStatsImageId = async function (processedEncounterJSON) {
 
-    const path = await generatePlayerStatsImage(processedEncounterJSON);
-    const fileId = await saveFile(path);
-    return fileId;
+    //const path = await generatePlayerStatsImage(processedEncounterJSON);
+
+    return {
+        path: 'img/image3.png',
+        name: 'image3.png'
+    };
 };
 
-export const handleStatsDeep = async function (channelId, reference, bossName) {
+export const handleStatsDeep = async function (channel, reference, bossName) {
 
-    Server.bot.simulateTyping(channelId);
+    channel.startTyping();
 
     // valiidate the tag
     const guildTagRegex = RegExp(/\[.{2,4}\]/);
     if (!guildTagRegex.test(reference)) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: 'Invalid guild referencee provided'
-        });
+        channel.send('Invalid guild reference provided');
+        channel.stopTyping();
         return;
     }
 
@@ -447,10 +444,8 @@ export const handleStatsDeep = async function (channelId, reference, bossName) {
     const guild = await mongoFindOne('guilds', { reference });
 
     if (!guild) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: 'The specified guild does not exist'
-        });
+        channel.send('The specified guild does not exist');
+        channel.stopTyping();
         return;
     }
 
@@ -465,84 +460,31 @@ export const handleStatsDeep = async function (channelId, reference, bossName) {
     const processedEncounterJSON = processStatsDeepEncounters(encounters);
     console.log( processedEncounterJSON );
 
-    const fileId = await getPlayerStatsImageId();
+    const img = await getPlayerStatsImageId();
 
-    console.log( fileId );
     // First embed contains general stats, dps/support and death information
     await new Promise( (resolve, reject) => {
 
-        const embed1 = {
-            title: `**${bossName}**`,
-            color: 4688353,
-            description: `Statistics for - ${guild.name} ${guild.tag}`,
-            thumbnail: {
-                url: 'https://wiki.guildwars2.com/images/c/c8/Mini_Mursaat_Overseer.png' //boss.thumbnail
-            },
-            fields: [
-                {
-                    name: 'General',
-                    value: buildGeneralStatsString(processedEncounterJSON),
-                    inline: true
-                },
-                {
-                    name: 'Time to Kill Breakdown',
-                    value: buildDurationStatsString(processedEncounterJSON),
-                    inline: true
-                },
-                {
-                    name: 'DPS',
-                    value: buildDpsStatsString(processedEncounterJSON)
-                },
-                {
-                    name: 'Top DPS Rankings',
-                    value: buildTopDpsStatsString(processedEncounterJSON)
-                },
-                {
-                    name: 'Support',
-                    value: buildSupportStatsString(processedEncounterJSON)
-                },
-                /*{
-                    name: 'Support Players',
-                    value: buildSupportPlayerStatsString(processedEncounterJSON)
-                },*/
-                {
-                    name: 'Roles',
-                    value: buildRoleBreakdownString(processedEncounterJSON)
-                },
-                {
-                    name: 'Down / Death Breakdown',
-                    value: buildDownDeathStatsString(processedEncounterJSON)
-                }
-            ],
-            /*image: {
-                url: `https://drive.google.com/uc?id=${fileId}`
-            }*/
-        };
+        const statsEmbed = new Discord.MessageEmbed();
+        statsEmbed.setTitle(`**${bossName}**`);
+        statsEmbed.setColor(4688353);
+        statsEmbed.setDescription(`Statistics for - ${guild.name} ${guild.tag}`);
+        statsEmbed.setThumbnail('https://wiki.guildwars2.com/images/c/c8/Mini_Mursaat_Overseer.png'); //boss.thumbnail
+        statsEmbed.addFields(
+            { name: 'General',                  value: buildGeneralStatsString(processedEncounterJSON), inline: true },
+            { name: 'Time to Kill Breakdown',   value: buildDurationStatsString(processedEncounterJSON), inline: true },
+            { name: 'DPS',                      value: buildDpsStatsString(processedEncounterJSON) },
+            { name: 'Top DPS Rankings',         value: buildTopDpsStatsString(processedEncounterJSON) },
+            { name: 'Support',                  value: buildSupportStatsString(processedEncounterJSON) },
+            { name: 'Roles',                    value: buildRoleBreakdownString(processedEncounterJSON) },
+            { name: 'Down / Death Breakdown',   value: buildDownDeathStatsString(processedEncounterJSON) }
+        );
+        statsEmbed.attachFiles([img.path]);
+        statsEmbed.setImage(`attachment://${img.name}`);
 
-        Server.bot.sendMessage({
-            to: channelId,
-            embed: embed1
-        }, (err, res) => {
-
-            if (err) {
-                console.log( err );
-            }
-
-            console.log( res.embeds[0].image );
-            return resolve();
-        });
-    });
-
-    await new Promise( (resolve, reject) => {
-
-        Server.bot.uploadFile({
-            to: channelId,
-            file: 'img/image3.png',
-            message: 'Player Breakdown'
-        }, () => {
-
-            return resolve();
-        });
+        channel.send(statsEmbed);
+        channel.stopTyping();
+        return resolve();
     });
 };
 

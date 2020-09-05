@@ -1,32 +1,25 @@
 import { addGuildMember } from '../../../methods/guildManagement';
-import { Server } from '../../../server';
 
-export const handleGuildMemberAdd = async function (channelId, userId, reference, accountName) {
+export const handleGuildMemberAdd = async function (channel, userId, reference, accountName) {
 
-    Server.bot.simulateTyping(channelId);
+    channel.startTyping();
 
     const accountNameRegex = RegExp(/[a-zA-z ]{2,24}\.\d{4}/);
     if (!accountNameRegex.test(accountName)) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: 'Invalid Guild Wars 2 account name provided'
-        });
+        channel.send('Invalid Guild Wars 2 account name provided');
+        channel.stopTyping();
         return;
     }
 
     const referenceRegex = RegExp(/\[.{2,4}\]-\d{3}/);
     if (!referenceRegex.test(reference)) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: 'Invalid guild tag provided'
-        });
+        channel.send('Invalid guild tag provided');
+        channel.stopTyping();
         return;
     }
 
     const response = await addGuildMember(userId, reference, accountName);
 
-    Server.bot.sendMessage({
-        to: channelId,
-        message: response
-    });
+    channel.send(response);
+    channel.stopTyping();
 };

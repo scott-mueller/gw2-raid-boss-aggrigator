@@ -4,7 +4,7 @@ import { redisGet, redisSet, redisDel } from './methods/redis';
 import { mongoInsert, mongoFind, mongoUpdateById, mongoDeleteById } from './methods/mongo';
 import { assert } from 'chai';
 
-const Discord = require('discord.io');
+const Discord = require('discord.js');
 const Redis = require('redis');
 
 export const Server = {
@@ -101,10 +101,8 @@ export const startServer = async function () {
     // Initialize Discord Bot
     promises.push(new Promise( (resolve, reject) => {
 
-        const bot = new Discord.Client({
-            token: Config.auth.token,
-            autorun: true
-        });
+        const bot = new Discord.Client();
+        bot.login(Config.auth.token);
 
         bot.on('ready', (evt) => {
 
@@ -117,10 +115,10 @@ export const startServer = async function () {
             return resolve('Discord Bot Ready');
         });
 
-        bot.on('message', async (user, userID, channelID, message, evt) => {
+        bot.on('message', async (message) => {
 
-            console.log( `Message Recieved: UserID: ${userID}, ChannelID: ${channelID}` );
-            await handleMessage(user, userID, channelID, message, evt);
+            console.log( `Message Recieved: UserID: ${message.author.id}, ChannelID: ${message.channel.id}` );
+            await handleMessage(message);
         });
 
     }));

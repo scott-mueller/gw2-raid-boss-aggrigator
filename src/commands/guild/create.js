@@ -1,69 +1,57 @@
 import { createGuild } from '../../methods/guildManagement';
-import { Server } from '../../server';
+const Discord = require('discord.js');
 
-export const handleGuildCreate = async function (channelId, userId, name, tag, guildId) {
+export const handleGuildCreate = async function (channel, userId, name, tag, guildId) {
 
-    Server.bot.simulateTyping(channelId);
+    channel.startTyping();
 
     // Validate the name
     if (name.length < 4 || name.length > 50) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: 'Invalid guild name provided'
-        });
+        channel.send('Invalid guild name provided');
+        channel.stopTyping();
         return;
     }
 
     // valiidate the tag
     const guildTagRegex = RegExp(/\[.{2,4}\]/);
     if (!guildTagRegex.test(tag)) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: 'Invalid guild tag provided'
-        });
+        channel.send('Invalid guild tag provided');
+        channel.stopTyping();
         return;
     }
 
     const response = await createGuild(name, tag, userId, guildId);
 
     if (response.error) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: response.error
-        });
+        channel.send(response.error);
+        channel.stopTyping();
         return;
     }
 
-    const embed = {
-        title: `**${response.guild.name} ${response.guild.tag} Created**`,
-        color: 4688353,
-        fields: [
-            {
-                name: 'Reference',
-                value: response.guild.reference
-            }
-        ]
-    };
+    const embed = new Discord.MessageEmbed();
+    embed.setTitle(`**${response.guild.name} ${response.guild.tag} Created**`);
+    embed.setColor(4688353);
+    embed.addFields({
+        name: 'Reference',
+        value: response.guild.reference
+    });
 
     switch (response.result) {
 
         case 'SUCCESS_IS_DEFAULT':
-            embed.fields.push({
+            embed.addFields({
                 name: 'Default status - Default',
                 value: 'You can use guild commands without a reference in this server\ne.g: `>guild roster`'
             });
             break;
 
         case 'SUCCESS_NOT_DEFAULT':
-            embed.fields.push({
+            embed.addFields({
                 name: 'Default status - Not Default',
                 value: 'If you want to change the default guild for this server, contact a server admin'
             });
             break;
     }
 
-    Server.bot.sendMessage({
-        to: channelId,
-        embed
-    });
+    channel.send(embed);
 };

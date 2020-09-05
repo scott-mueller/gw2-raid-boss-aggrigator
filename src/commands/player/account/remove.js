@@ -1,14 +1,11 @@
 import { removeGW2Account } from '../../../methods/users';
-import { Server } from '../../../server';
 
-export const handleAccountRemove = async function (channelId, userId, accountName) {
+export const handleAccountRemove = async function (channel, userId, accountName) {
 
-    Server.bot.simulateTyping(channelId);
+    channel.startTyping();
 
     const response = await removeGW2Account(userId, accountName);
 
-    Server.bot.sendMessage({
-        to: channelId,
-        message: response
-    });
+    channel.send(response);
+    channel.stopTyping();
 };

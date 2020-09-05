@@ -1,29 +1,24 @@
-import { Server } from '../../server';
 import { getGuildRoster } from '../../methods/guildManagement';
+const Discord = require('discord.js');
 
-export const handleGuildViewRoster = async function (channelId, guildId, reference) {
+export const handleGuildViewRoster = async function (channel, guildId, reference) {
 
-    Server.bot.simulateTyping(channelId);
+    channel.startTyping();
 
     const referenceRegex = RegExp(/\[.{2,4}\]-\d{3}/);
     if (!referenceRegex.test(reference)) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: 'Invalid guild tag provided'
-        });
+        channel.send('Invalid guild tag provided');
+        channel.stopTyping();
         return;
     }
 
     const response = await getGuildRoster(guildId, reference);
 
     if (response.error) {
-        Server.bot.sendMessage({
-            to: channelId,
-            message: response.error
-        });
+        channel.send(response.error);
+        channel.stopTyping();
         return;
     }
-
 
     const sortedRoster = response.guild.roster.sort((a, b) => {
 
@@ -52,9 +47,7 @@ We suggest trying to keep your roster between 10 and 15 players for the best res
         ]
     };
 
-    Server.bot.sendMessage({
-        to: channelId,
-        embed
-    });
+    channel.send(new Discord.MessageEmbed(embed));
+    channel.stopTyping();
 
 };

@@ -277,7 +277,6 @@ const processNewLog = async function (dpsReportUrl, evtcJSON) {
             timeEndUpperBound: undefined
         },
         accountNames: [],
-        guildIds: [],
         bossName: path(['fightName'])(evtcJSON),
         duration: path(['duration'])(evtcJSON),
         durationMs: path(['duration'])(evtcJSON).convertToMs(),
@@ -310,15 +309,12 @@ const processNewLog = async function (dpsReportUrl, evtcJSON) {
         const downs = pathOr([], ['mechanics', downedIndex, 'mechanicsData'])(evtcJSON);
         newEncounter.firstDown = determineFirstMechanicOccurrence(downs);
 
-        let guildIds = [];
-
         const players = path(['players'])(evtcJSON);
         for (let i = 0; i < players.length; ++i) {
 
             const player = players[i];
 
             const storedPlayer = await getOrCreatePlayer(player.account);
-            guildIds = guildIds.concat(storedPlayer.guildIds);
 
             newEncounter.uniqueChecking.recordedByList.push(player.name);
             newEncounter.accountNames.push(player.account);
@@ -360,17 +356,10 @@ const processNewLog = async function (dpsReportUrl, evtcJSON) {
             newEncounter.players.push(simplePlayer);
         }
 
-        const uniqueGuildIds = uniq(guildIds);
-        for (let i = 0; i < uniqueGuildIds.length; ++i) {
-
-            if (await doesEncounterMatchGuildRoster(uniqueGuildIds[i], newEncounter.accountNames)) {
-                newEncounter.guildIds.push(uniqueGuildIds[i]);
-            }
-        }
-
         evtcJSON.gw2rbaEncounterId = newEncounter.encounterId;
 
         // Add the log to the encounters collection and the evtcJSON to the evtc collection
+        console.log('here!');
         await mongoInsert('encounters', newEncounter);
         await mongoInsert('evtc', evtcJSON);
         return;

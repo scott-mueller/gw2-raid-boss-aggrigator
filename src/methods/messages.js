@@ -167,6 +167,11 @@ export const handleMessage = async function (message) {
 
             case 'quick-start':
                 break;
+
+            case 'test':
+                message.channel.startTyping();
+                message.channel.send(`We're in business boys`);
+                message.channel.stopTyping();
         }
     }
 

@@ -74,7 +74,7 @@ export const startServer = async function () {
     }));
 
     // Connect to Redis
-    promises.push(new Promise( (resolve, reject) => {
+    /*promises.push(new Promise( (resolve, reject) => {
 
         const rClient = Redis.createClient(Config.redis);
 
@@ -96,7 +96,7 @@ export const startServer = async function () {
 
             console.error(error);
         });
-    }));
+    }));*/
 
     // Initialize Discord Bot
     promises.push(new Promise( (resolve, reject) => {
@@ -137,7 +137,7 @@ process.on( 'mongoReady', async () => {
         listenChannels.push(guild.logChannel);
     });
 
-    await redisSet('listenChannels', listenChannels);
+    //await redisSet('listenChannels', listenChannels);
 });
 
 process.on( 'unhandledRejection', (err) => {

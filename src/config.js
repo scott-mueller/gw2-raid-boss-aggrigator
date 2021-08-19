@@ -9,8 +9,8 @@ export const config = {
     },
 
     mongo: {
-        url: 'mongodb://192.168.99.1:27017',
-        dbName: 'GW2-Raid-Boss-Aggrigator'
+        url: 'mongodb://localhost:27017',
+        dbName: 'gw2rba'
     },
 
     redis: {

@@ -13,17 +13,12 @@ const generateId = customAlphabet(config.idGeneration.alphabet, 8);
 String.prototype.convertToMs = function () {
 
     const inputStr = this.valueOf();
+    const splitInputs = inputStr
+        .split(' ')
+        .map((component) => component.replace(/[a-zA-Z]+/, ''))
+        .map((component) => parseInt(component));
 
-    const regex = RegExp(/\d{2}m \d{2}s \d{3}ms/);
-    if (!regex.test(inputStr)) {
-        throw new TypeError('Incorrect duration format. String must be in format \'XXm YYs ZZZms\'')
-    }
-
-    const minComp = parseInt(inputStr.substring(0, 2));
-    const secComp = parseInt(inputStr.substring(4, 6));
-    const msComp = parseInt(inputStr.substring(8, 11));
-
-    return (minComp * 60000) + (secComp * 1000) + msComp;
+    return (splitInputs[0] * 60000) + (splitInputs[1] * 1000) + splitInputs[2];
 };
 
 const buildPlayerMechanicArray = function (mechanicData, characterName, accountName) {
@@ -45,11 +40,11 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
     // Tag List
     /**
      * Healer
-     * Toughness
      * Quickness
      * Alacrity
      * Might
-     * Banner Slave
+     * Fury
+     * Banners
      * Power DPS
      * Condi DPS
      */
@@ -63,8 +58,8 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
         totalDamage += targetStats.damage;
     });
 
-    // Classed as a DPS if you do more than 9% of the total (aka pulling your share - with a small buffer)
-    if ((totalDamage / bossHealthLost) * 100 > 9) {
+    // Classed as a DPS if you do more than 7% of the total (aka pulling your share - with a buffer)
+    if ((totalDamage / bossHealthLost) * 100 > 7) {
         if (player.condition > 5) {
             tags.push('Condi DPS');
         }
@@ -77,17 +72,13 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
         tags.push('Healer');
     }
 
-    if (player.toughness > 4) {
-        tags.push('Toughness');
-    }
-
     const usefulBuffs = [
         'Quickness',
-        'Alacrity'
+        'Alacrity',
+        'Fury'
     ];
 
-    // Lets see whether they generate any useful boons for their subgroup
-    pathOr([], ['groupBuffs'])(player).forEach((buff) => {
+    const computeBuff = (buff) => {
 
         const totalGeneration = path(['buffData', 0, 'generation'])(buff);
         const buffDesc = buffMap['b' + buff.id];
@@ -104,40 +95,16 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
 
         // Maybe they are a banner warrior?
         if (player.profession === 'Warrior' || player.profession === 'Berserker' || player.profession === 'Spellbreaker') {
-            if (buffDesc.name === 'Banner of Strength') {
-                if (totalGeneration > 20) {
-                    tags.push('Banner Slave');
+            if (buffDesc.name === 'Banner of Strength' || buffDesc.name === 'Banner of Discipline') {
+                if (totalGeneration > 20 && !tags.includes('Banners')) {
+                    tags.push('Banners');
                 }
             }
         }
-    });
+    };
 
-    // Lets see whether they generate any useful boons for the squad (own subgroup)
-    pathOr([], ['squadBuffs'])(player).forEach((buff) => {
-
-        const totalGeneration = path(['buffData', 0, 'generation'])(buff);
-        const buffDesc = buffMap['b' + buff.id];
-
-        if (usefulBuffs.includes(buffDesc.name) && totalGeneration > 20) {
-
-            tags.push(buffDesc.name);
-        }
-
-        if (buffDesc.name === 'Might' && totalGeneration > 5) {
-
-            tags.push(buffDesc.name);
-        }
-
-        // Maybe they are a banner warrior?
-        if (player.profession === 'Warrior' || player.profession === 'Berserker' || player.profession === 'Spellbreaker') {
-            if (buffDesc.name === 'Banner of Strength') {
-                if (totalGeneration > 20) {
-                    tags.push('Banner Slave');
-                }
-            }
-        }
-    });
-
+    pathOr([], ['groupBuffs'])(player).forEach((buff) => computeBuff(buff));    // Subgroup
+    pathOr([], ['squadBuffs'])(player).forEach((buff) => computeBuff(buff));    // Squad
     return uniq(tags);
 };
 
@@ -260,6 +227,17 @@ const isExistingLog = async function (evtcJSON) {
     };
 };
 
+const getActiveCollector = async function (guildId, channelId) {
+
+    const query = {
+        active: true,
+        guildId,
+        channelId
+    };
+    const collector = await mongoFindOne('collectors', query) || {};
+    return collector._id || undefined;
+};
+
 const maybeProcessNewBoss = async function (evtcJSON) {
 
     // TODO, see if redis has the bossName
@@ -267,10 +245,11 @@ const maybeProcessNewBoss = async function (evtcJSON) {
     // Holds basic info like the fight icon etc
 };
 
-const processNewLog = async function (dpsReportUrl, evtcJSON) {
+const processNewLog = async function (dpsReportUrl, evtcJSON, collectorId) {
 
     const newEncounter = {
         encounterId: generateId(),
+        collectorId,
         uniqueChecking: {
             recordedByList: [],
             timeEndLowerBound: undefined,
@@ -359,7 +338,6 @@ const processNewLog = async function (dpsReportUrl, evtcJSON) {
         evtcJSON.gw2rbaEncounterId = newEncounter.encounterId;
 
         // Add the log to the encounters collection and the evtcJSON to the evtc collection
-        console.log('here!');
         await mongoInsert('encounters', newEncounter);
         await mongoInsert('evtc', evtcJSON);
         return;
@@ -420,11 +398,15 @@ export const maybeProcessEncounter = async function (guildId, message) {
             // Process the log
             if (existingLogStatus.exists) {
                 console.log( `Log already captured for permalink: ${permalink}` );
+
+                // TODO Attach a collector to the log
             }
             else {
                 console.log( `Processing new log with permalink: ${permalink}` );
                 await maybeProcessNewBoss(evtcJSON);
-                await processNewLog(url, evtcJSON);
+
+                const collectorId = await getActiveCollector(guildId, message.channel.id);
+                await processNewLog(url, evtcJSON, collectorId);
             }
         }
         catch (err) {

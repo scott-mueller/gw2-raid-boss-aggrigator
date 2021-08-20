@@ -15,6 +15,9 @@ import { handleGuildGrantAdmin } from '../commands/guild/grant-admin';
 import { mongoFindOne } from './mongo';
 import { handleStatsDeep } from '../commands/stats/deep';
 
+import { handleCollectorStart } from '../commands/collector/start';
+import { handleCollectorEnd } from '../commands/collector/end';
+
 const _appendGuildReferenceToBeginningOfArgs = async function (args, guildId) {
 
     const referenceRegex = RegExp(/\[.{2,4}\]-\d{3}/);
@@ -141,6 +144,23 @@ const _handleStatsCommand = async function (args, message) {
     }
 };
 
+const handleCollectorCommand = async function (args, message) {
+
+    const guildId = message.channel.guild.id;
+    const channelId = message.channel.id;
+
+    const collectorMap = {
+        start: async (gId, cId) => await handleCollectorStart(gId, cId),
+        end: async (gId, cId) => await handleCollectorEnd(gId, cId)
+    };
+
+    const responseText = await collectorMap[args[0]](guildId, channelId);
+    if (responseText) {
+        message.channel.send(responseText);
+    }
+    
+};
+
 export const handleMessage = async function (message) {
 
     const msgContent = message.content;
@@ -151,28 +171,18 @@ export const handleMessage = async function (message) {
         const baseCmd = args[0];
         args = args.splice(1);
 
-        switch (baseCmd) {
+        const commandHandlerMap = {
+            guild: (a, m) => _handleGuildCommand(a, m),         // Deprecated
+            player: (a, m) => _handlePlayerCommand(a, m),       // Deprecated
+            stats: (a, m) => _handleStatsCommand(a, m),         // Deprecated
+            collector: async (a, m) => await handleCollectorCommand(a, m),
+            test: (a, m) => {
 
-            case 'player':
-                _handlePlayerCommand(args, message);
-                break;
 
-            case 'guild':
-                _handleGuildCommand(args, message);
-                break;
+            }
+        };
 
-            case 'stats':
-                _handleStatsCommand(args, message);
-                break;
-
-            case 'quick-start':
-                break;
-
-            case 'test':
-                message.channel.startTyping();
-                message.channel.send(`We're in business boys`);
-                message.channel.stopTyping();
-        }
+        await commandHandlerMap[baseCmd](args, message);
     }
 
     // No commands found. Maybe we have en encounter to process?

@@ -10,7 +10,8 @@
         "no-console": "off",
         "no-nested-ternary": "off",
         "no-underscore-dangle": "off",
-        "require-await": "off"
+        "require-await": "off",
+        "hapi/hapi-scope-start": "off"
     },
     "parserOptions": {
         "ecmaVersion": 2019,

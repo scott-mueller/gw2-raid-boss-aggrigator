@@ -7,3 +7,5 @@ package-lock.json
 src/auth.json
 
 .nyc_output
+
+.env

@@ -5,6 +5,9 @@ import { mongoFind, mongoInsert } from '../../methods/mongo';
 
 const generateId = customAlphabet(config.idGeneration.alphabet, 8);
 
+/**
+ * >collector start
+ */
 export const handleCollectorStart = async function (guildId, channelId) {
 
     // check if any are running - only 1 allowed

@@ -1,4 +1,4 @@
-import { handleMessage } from './methods/messages';
+import { maybeProcessEncounter } from './methods/processEncounter';
 import { config as Config } from './config';
 import { mongoInsert, mongoFind, mongoUpdateById, mongoDeleteById } from './methods/mongo';
 import { assert } from 'chai';
@@ -76,7 +76,9 @@ export const startServer = async function () {
         bot.on('message', async (message) => {
 
             console.log( `Message Recieved: UserID: ${message.author.id}, ChannelID: ${message.channel.id}` );
-            await handleMessage(message);
+            const guildId = message.guild.id;
+            await maybeProcessEncounter(guildId, message);
+            return;
         });
 
         bot.on('interactionCreate', async (interaction) => {

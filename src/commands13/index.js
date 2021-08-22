@@ -1,5 +1,5 @@
 import Ping from './ping';
-import Collector from './collector.js';
+import Collector from './collector';
 
 const commandsArray = [
     Ping,

@@ -1,7 +1,8 @@
 import { SlashCommandBuilder } from '@discordjs/builders';
 
-import { handleCollectorStart } from './collector/start';
-import { handleCollectorEnd } from './collector/end';
+import { handleCollectorStart } from './start';
+import { handleCollectorEnd } from './end';
+import { handleCollectorProgress } from './progress';
 
 const collector = {
     data: new SlashCommandBuilder()
@@ -9,21 +10,28 @@ const collector = {
         .setDescription('Handles collector commands')
         .addSubcommand((subcommand) => subcommand
             .setName('start')
-            .setDescription('Starts a collector to keep track of arc dps logs posted to this channel')
+            .setDescription('Collects arc dps Logs until stopped')
         )
         .addSubcommand((subcommand) => subcommand
             .setName('end')
             .setDescription('Ends the active collector on this channel')
-        ),
+        )
+        .addSubcommand((subcommand) => subcommand
+            .setName('progress')
+            .setDescription('Info about the current collector')),
     async execute(interaction) {
 
         switch (interaction.options._subcommand) {
             case 'start': {
-                return handleCollectorStart(interaction);
+                return await handleCollectorStart(interaction);
+            }
+
+            case 'progress': {
+                return await handleCollectorProgress(interaction);
             }
 
             case 'end': {
-                return handleCollectorEnd(interaction);
+                return await handleCollectorEnd(interaction);
             }
         }
 

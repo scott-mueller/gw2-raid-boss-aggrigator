@@ -15,9 +15,6 @@ import { handleGuildGrantAdmin } from '../commands/guild/grant-admin';
 import { mongoFindOne } from './mongo';
 import { handleStatsDeep } from '../commands/stats/deep';
 
-import { handleCollectorStart } from '../commands/collector/start';
-import { handleCollectorEnd } from '../commands/collector/end';
-
 const _appendGuildReferenceToBeginningOfArgs = async function (args, guildId) {
 
     const referenceRegex = RegExp(/\[.{2,4}\]-\d{3}/);
@@ -144,23 +141,6 @@ const _handleStatsCommand = async function (args, message) {
     }
 };
 
-const handleCollectorCommand = async function (args, message) {
-
-    const guildId = message.channel.guild.id;
-    const channelId = message.channel.id;
-
-    const collectorMap = {
-        start: async (gId, cId) => await handleCollectorStart(gId, cId),
-        end: async (gId, cId) => await handleCollectorEnd(gId, cId)
-    };
-
-    const responseText = await collectorMap[args[0]](guildId, channelId);
-    if (responseText) {
-        message.channel.send(responseText);
-    }
-    
-};
-
 export const handleMessage = async function (message) {
 
     const msgContent = message.content;
@@ -175,7 +155,6 @@ export const handleMessage = async function (message) {
             guild: (a, m) => _handleGuildCommand(a, m),         // Deprecated
             player: (a, m) => _handlePlayerCommand(a, m),       // Deprecated
             stats: (a, m) => _handleStatsCommand(a, m),         // Deprecated
-            collector: async (a, m) => await handleCollectorCommand(a, m),
             test: (a, m) => {
 
 

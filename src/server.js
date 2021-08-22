@@ -2,7 +2,8 @@ import { handleMessage } from './methods/messages';
 import { config as Config } from './config';
 import { mongoInsert, mongoFind, mongoUpdateById, mongoDeleteById } from './methods/mongo';
 import { assert } from 'chai';
-import { Client, Intents } from 'discord.js';
+import { Client, Collection, Intents } from 'discord.js';
+import commands from './commands13';
 
 export const Server = {
     bot: undefined,
@@ -53,6 +54,12 @@ export const startServer = async function () {
     promises.push(new Promise( (resolve, reject) => {
 
         const bot = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
+        bot.commands = new Collection();
+
+        for (const command of commands) {
+            bot.commands.set(command.data.name, command);
+        }
+
         bot.login(Config.auth.token);
 
         bot.once('ready', (evt) => {
@@ -70,6 +77,22 @@ export const startServer = async function () {
 
             console.log( `Message Recieved: UserID: ${message.author.id}, ChannelID: ${message.channel.id}` );
             await handleMessage(message);
+        });
+
+        bot.on('interactionCreate', async (interaction) => {
+
+            const command = bot.commands.get(interaction.commandName);
+            if (!interaction.isCommand() || !command) {
+                return;
+            }
+
+            try {
+                await command.execute(interaction);
+            }
+            catch (err) {
+                console.log(err);
+                await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+            }
         });
 
     }));

@@ -8,7 +8,9 @@ const generateId = customAlphabet(config.idGeneration.alphabet, 8);
 /**
  * >collector start
  */
-export const handleCollectorStart = async function (guildId, channelId) {
+export const handleCollectorStart = async function (interaction) {
+
+    const { channelId, guildId } = interaction;
 
     // check if any are running - only 1 allowed
     const collectors = await mongoFind('collectors', { active: true, guildId, channelId });
@@ -25,5 +27,5 @@ export const handleCollectorStart = async function (guildId, channelId) {
     };
 
     await mongoInsert('collectors', collectorDocument);
-    return 'Collector started!';
+    return await interaction.reply('Collector started!');
 };

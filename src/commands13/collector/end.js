@@ -7,10 +7,10 @@ const computeEncounterStats = async function (collectorId) {
     console.log(encounters.length);
 };
 
-/**
- * >collector end
- */
-export const handleCollectorEnd = async function (guildId, channelId) {
+
+export const handleCollectorEnd = async function (interaction) {
+
+    const { channelId, guildId } = interaction;
 
     // Lets get the active collector
     const collector = await mongoFindOne('collectors', { active: true, guildId, channelId });
@@ -21,5 +21,5 @@ export const handleCollectorEnd = async function (guildId, channelId) {
     // Update the doc
     await mongoUpdateById('collectors', collector._id, { active: false, endTime: Date.now() } );
     computeEncounterStats(collector._id);
-    return 'TODO - report the stats';
+    return await interaction.reply('TODO - report the stats');
 };

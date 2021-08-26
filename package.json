@@ -11,6 +11,7 @@
     "start": "node bootstrap.js",
     "debug": "nodemon --inspect=4500 bootstrap.js",
     "deploy-local": "MODE=deploy-test node bootstrap.js",
+    "deploy-global": "MODE=deploy-global node bootstrap.js",
     "google-auth": "node googleAuth.js"
   },
   "author": "Scott Mueller (scott.mueller12@hotmail.com)",

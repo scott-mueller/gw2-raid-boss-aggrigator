@@ -245,7 +245,7 @@ const maybeProcessNewBoss = async function (evtcJSON) {
     // Holds basic info like the fight icon etc
 };
 
-const processNewLog = async function (dpsReportUrl, evtcJSON, collectorId) {
+const processNewLog = async function (dpsReportUrl, permalink, evtcJSON, collectorId) {
 
     const newEncounter = {
         encounterId: generateId(),
@@ -263,6 +263,7 @@ const processNewLog = async function (dpsReportUrl, evtcJSON, collectorId) {
         success: path(['success'])(evtcJSON),
         players: [],
         dpsReportUrl,
+        dpsReportPermaLink: permalink,
         firstDeath: undefined,
         firstDown: undefined
     };
@@ -339,7 +340,7 @@ const processNewLog = async function (dpsReportUrl, evtcJSON, collectorId) {
 
         // Add the log to the encounters collection and the evtcJSON to the evtc collection
         await mongoInsert('encounters', newEncounter);
-        await mongoInsert('evtc', evtcJSON);
+        //await mongoInsert('evtc', evtcJSON);
         return;
 
     }
@@ -406,7 +407,7 @@ export const maybeProcessEncounter = async function (guildId, message) {
                 await maybeProcessNewBoss(evtcJSON);
 
                 const collectorId = await getActiveCollector(guildId, message.channel.id);
-                await processNewLog(url, evtcJSON, collectorId);
+                await processNewLog(url, permalink, evtcJSON, collectorId);
             }
         }
         catch (err) {

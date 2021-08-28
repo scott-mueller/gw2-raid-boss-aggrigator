@@ -1,9 +1,12 @@
+import Express from 'express';
+
 import { maybeProcessEncounter } from './methods/processEncounter';
 import { config as Config } from './config';
 import { mongoInsert, mongoFind, mongoUpdateById, mongoDeleteById } from './methods/mongo';
 import { assert } from 'chai';
 import { Client, Collection, Intents } from 'discord.js';
 import commands from './commands13';
+import registerRoutes from './routes';
 
 export const Server = {
     bot: undefined,
@@ -97,6 +100,18 @@ export const startServer = async function () {
             }
         });
 
+    }));
+
+    promises.push(new Promise( async (resolve, reject) => {
+
+        const app = Express();
+
+        await registerRoutes(app);
+
+        app.listen(Config.port, () => {
+            console.log(`Express Server listening on port ${Config.port}`);
+            return resolve();
+        });
     }));
 
     return await Promise.all(promises);

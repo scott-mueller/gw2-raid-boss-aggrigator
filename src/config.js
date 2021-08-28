@@ -2,6 +2,8 @@ require('dotenv').config();
 
 export const config = {
 
+    port: 3100,
+
     auth: {
         token: process.env.DISCORD_AUTH_TOKEN
     },
@@ -11,8 +13,8 @@ export const config = {
     },
 
     mongo: {
-        url: 'mongodb://localhost:27017',
-        dbName: 'gw2rba'
+        url: process.env.MONGO_URI || 'mongodb://localhost:27017',
+        dbName: 'gw2-rba'
     },
 
     apis: {
@@ -23,5 +25,16 @@ export const config = {
         GW2API: {
             baseUrl: `https://api.guildwars2.com`
         }
-    }
+    },
+
+    roleList: [
+        'Healer',
+        'Quickness',
+        'Alacrity',
+        'Might',
+        'Fury',
+        'Banners',
+        'Power-DPS',
+        'Condi-DPS'
+    ]
 };

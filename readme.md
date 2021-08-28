@@ -1,4 +1,5 @@
 Commands that work
 
-    -   `>collector start`
-    -   `>collector stop`
+    -   `/collector start`
+    -   `/collector stop`
+    -   `/ping`

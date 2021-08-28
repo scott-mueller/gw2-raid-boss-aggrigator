@@ -19,6 +19,11 @@ const collector = {
         .addSubcommand((subcommand) => subcommand
             .setName('progress')
             .setDescription('Info about the current collector')),
+    //Collector Schedule!
+    // Start time, end time, chennel
+    // starts a collector in the channel at a specific time
+    // Our use case: collector starts at 8:20, ends at midnight
+    // collector end stops the collector early
     async execute(interaction) {
 
         switch (interaction.options._subcommand) {

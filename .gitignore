@@ -1,11 +1,4 @@
 # Dependency directory
 node_modules
 
-# package lock
-package-lock.json
-
-src/auth.json
-
-.nyc_output
-
 .env

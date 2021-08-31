@@ -84,13 +84,15 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
         const buffDesc = buffMap['b' + buff.id];
 
         if (usefulBuffs.includes(buffDesc.name) && totalGeneration > 20) {
-
             tags.push(buffDesc.name);
         }
 
         if (buffDesc.name === 'Might' && totalGeneration > 5) {
-
             tags.push(buffDesc.name);
+        }
+
+        if (buffDesc.name === 'Last Rites') {
+            tags.push('Healer');
         }
 
         // Maybe they are a banner warrior?
@@ -293,6 +295,9 @@ const processNewLog = async function (dpsReportUrl, permalink, evtcJSON, collect
         for (let i = 0; i < players.length; ++i) {
 
             const player = players[i];
+            if (player.isFake) {
+                continue;
+            }
 
             const storedPlayer = await getOrCreatePlayer(player.account);
 

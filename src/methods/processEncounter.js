@@ -1,6 +1,6 @@
 /* eslint-disable no-extend-native */
 import { path, pathOr, uniq } from 'ramda';
-import { mongoFind, mongoInsert, mongoFindOne } from './mongo';
+import { mongoFind, mongoInsert, mongoFindOne, mongoUpdateById } from './mongo';
 import { getOrCreatePlayer } from './users';
 import { config } from '../config';
 import { customAlphabet } from 'nanoid';
@@ -68,7 +68,7 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
         }
     }
 
-    if (player.healing >= 5) {
+    if (player.healing >= 4) {
         tags.push('Healer');
     }
 
@@ -182,26 +182,6 @@ const determineMechanicsIndex = function (logMechanics, mechanicName) {
     return false;
 };
 
-const doesEncounterMatchGuildRoster = async function (guildId, accountNames) {
-
-    const guild = await mongoFindOne('guilds', { _id: guildId });
-    if (!guild) {
-        console.log( `Unable to find guild with id: ${guildId}` );
-        return false;
-    }
-
-    let matchCount = 0;
-    accountNames.forEach((name) => {
-
-        if (guild.roster.includes(name)) {
-            matchCount++;
-        }
-    });
-
-    return matchCount >= 8;
-
-};
-
 const isExistingLog = async function (evtcJSON) {
 
     // Find any existing logs for this boss that this player is a part of
@@ -238,13 +218,6 @@ const getActiveCollector = async function (guildId, channelId) {
     };
     const collector = await mongoFindOne('collectors', query) || {};
     return collector._id || undefined;
-};
-
-const maybeProcessNewBoss = async function (evtcJSON) {
-
-    // TODO, see if redis has the bossName
-    // If not, add the name to redis, then create a doc in the 'bosses' collection
-    // Holds basic info like the fight icon etc
 };
 
 const processNewLog = async function (dpsReportUrl, permalink, evtcJSON, collectorId) {
@@ -400,18 +373,21 @@ export const maybeProcessEncounter = async function (guildId, message) {
             }
 
             const existingLogStatus = await isExistingLog(evtcJSON);
+            const collectorId = await getActiveCollector(guildId, message.channel.id);
 
             // Process the log
             if (existingLogStatus.exists) {
                 console.log( `Log already captured for permalink: ${permalink}` );
 
-                // TODO Attach a collector to the log
+                // add the collector if one is running
+                const { encounter } = existingLogStatus;
+                if (collectorId && !encounter.collectorId) {
+                    console.log('Adding collector to existing log');
+                    await mongoUpdateById('encounters', encounter._id, { collectorId });
+                }
             }
             else {
                 console.log( `Processing new log with permalink: ${permalink}` );
-                await maybeProcessNewBoss(evtcJSON);
-
-                const collectorId = await getActiveCollector(guildId, message.channel.id);
                 await processNewLog(url, permalink, evtcJSON, collectorId);
             }
         }

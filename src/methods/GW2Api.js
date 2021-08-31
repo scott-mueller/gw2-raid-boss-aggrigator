@@ -1,6 +1,5 @@
 import { config } from '../config';
-
-const Axios = require('axios');
+import Axios from 'axios';
 
 
 export const getGW2Account = async function (apiKey) {

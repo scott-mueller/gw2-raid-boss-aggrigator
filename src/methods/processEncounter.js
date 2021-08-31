@@ -4,9 +4,8 @@ import { mongoFind, mongoInsert, mongoFindOne, mongoUpdateById } from './mongo';
 import { getOrCreatePlayer } from './users';
 import { config } from '../config';
 import { customAlphabet } from 'nanoid';
-
-const Axios = require('axios');
-const Moment = require('moment-timezone');
+import Axios from 'axios';
+import Moment from 'moment-timezone';
 
 const generateId = customAlphabet(config.idGeneration.alphabet, 8);
 

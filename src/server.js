@@ -1,5 +1,7 @@
 import Express from 'express';
 
+import mongodb from 'mongodb';
+
 import { maybeProcessEncounter } from './methods/processEncounter';
 import { config as Config } from './config';
 import { mongoInsert, mongoFind, mongoUpdateById, mongoDeleteById } from './methods/mongo';
@@ -20,9 +22,9 @@ export const startServer = async function () {
     // Connect to mongo
     promises.push(new Promise( (resolve, reject) => {
 
-        const MongoClient = require('mongodb').MongoClient;
+        //const MongoClient = require('mongodb').MongoClient;
 
-        MongoClient.connect(Config.mongo.url, async (err, client) => {
+        mongodb.MongoClient.connect(Config.mongo.url, async (err, client) => {
 
             assert.equal(null, err);
             console.log( 'MongoDB connected' );

@@ -2,8 +2,7 @@ import { path, pathOr, filter, unfold } from 'ramda';
 
 import { mongoFindOne, mongoUpdateById, mongoInsert, mongoFind } from './mongo';
 import { getGW2Account } from './GW2Api';
-
-const Moment = require('moment-timezone');
+import Moment from 'moment-timezone';
 
 export const verifyGW2Account = function (userId, accountName) {
 

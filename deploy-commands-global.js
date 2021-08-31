@@ -1,10 +1,8 @@
-const { REST } = require('@discordjs/rest');
-const { Routes } = require('discord-api-types/v9');
+import { REST } from '@discordjs/rest';
+import { Routes } from 'discord-api-types/v9';
 
 import { config as Config } from './src/config';
-import commands from './src/commands13';
-
-require('dotenv').config();
+import commands from './src/commands13/index';
 
 const JSONCommands = commands.map((command) => command.data.toJSON());
 
@@ -25,4 +23,4 @@ const deployCommands = async function () {
     }
 };
 
-deployCommands();
+export default deployCommands;

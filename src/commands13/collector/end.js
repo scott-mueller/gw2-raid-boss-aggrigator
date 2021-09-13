@@ -1,6 +1,6 @@
 /* eslint-disable no-extend-native */
 import { MessageEmbed } from 'discord.js';
-import { equals, uniq } from 'ramda';
+import { equals } from 'ramda';
 import { mongoFind, mongoFindOne, mongoUpdateById } from '../../methods/mongo';
 import Moment from 'moment-timezone';
 
@@ -37,107 +37,6 @@ ${acdps.padding(20)}${(stats.totalCleaveDps / stats.logCount).toFixed(0).toStrin
 
     return str;
 };
-
-const buildBossStatsString = function (stats) {
-
-    const { bosses } = stats;
-
-    const header = `${'Boss Name'.padding(25)}${'Success'.padding(10)}${'Fail'.padding(10)}${'Success Rate'}\n\n`;
-    const str = Object
-        .keys(bosses)
-        .map((key) => {
-            const boss = bosses[key];
-            return `${boss.name.padding(25)}${boss.success.toString().padding(10)}${boss.fail.toString().padding(10)}${((boss.success / (boss.success + boss.fail)) * 100).toFixed(1)}%`;
-        })
-        .join('\n');
-
-    return `\`\`\`${header}${str}\`\`\``;
-};
-
-const buildPlayerStatsFields = function (stats) {
-
-    const fieldArray = [];
-
-    const { accounts } = stats;
-    Object.keys(accounts).forEach((key) => {
-        const account = accounts[key];
-
-        fieldArray.push({ name: account.accountName, value: buildAccountStatsString(account), inline: true });
-    });
-
-    return fieldArray;
-};
-
-const buildAccountStatsString = function (account) {
-
-    const str =
-`\`\`\`
-Avg DPS:
-${'Boss:'.padding(12)}${(account.totalBossDps / account.encounterCount).toFixed(0).toString().formatDPS()}
-${'Cleave:'.padding(12)}${(account.totalCleaveDps / account.encounterCount).toFixed(0).toString().formatDPS()}
-\`\`\`` +
-`\`\`\`
-${'Revives:'.padding(12)}${account.revives} 
-${'ReviveTime:'.padding(12)}${account.reviveTime.toFixed(1)}s
-\`\`\`` +
-`\`\`\`
-${'Downs:'.padding(12)}${account.downDeathStats.downs} 
-${'Deaths:'.padding(12)}${account.downDeathStats.deaths}
-\`\`\``;
-
-    return str;
-};
-
-const buildRoleStatsFields = function (stats) {
-
-    const fieldArray = [];
-
-    const { accounts } = stats;
-
-    let presentRoles = [];
-    Object.keys(accounts).forEach((key) => {
-        const roles = accounts[key].roleMap;
-        presentRoles.push(...Object.keys(roles));
-    });
-    presentRoles = uniq(presentRoles);
-
-    presentRoles.forEach((role) => {
-
-        const roleStat = {
-            roleName: undefined,
-            accounts: []
-        };
-
-        Object.keys(accounts).forEach((key) => {
-            const account = accounts[key];
-            const accountRole = account.roleMap[role];
-            if (accountRole) {
-                if (!roleStat.roleName) {
-                    roleStat.roleName = accountRole.name;
-                }
-
-                roleStat.accounts.push({ name: account.accountName, count: accountRole.count });
-            }
-        });
-
-        fieldArray.push({ name: roleStat.roleName, value: buildRoleString(roleStat) });
-    });
-
-    return fieldArray;
-};
-
-const buildRoleString = function (roleStat) {
-
-    const str = roleStat.accounts
-        .map((account) => `${account.name.padding(25)}${account.count}`)
-        .join('\n');
-
-    return `\`\`\`${str}\`\`\``;
-};
-
-
-///////////////////////////////////// ^^^
-///////////////////////////////////// Above is garbage!!
 
 const computeEncounterStats = async function (collectorId) {
 
@@ -305,34 +204,17 @@ export const handleCollectorEnd = async function (interaction) {
 
     // Format the stats into the reply
     const general = new MessageEmbed()
-        .setTitle(`Statistics!`)
-        .setDescription('General statistics for period starting x and ending y')
+        .setTitle(`Statistics! - ${collector._id}`)
+        .setDescription(`Click here for Stats!\nhttps://scott-mueller.github.io/gw2-raid-dashboard/#/collector?collectorId=${collector._id}`)
+        .setURL(`https://scott-mueller.github.io/gw2-raid-dashboard/#/collector?collectorId=${collector._id}`)
         .setColor(4688353)
+        .setTimestamp()
+        .setThumbnail('https://i.imgur.com/qb3bRS9.png')
         .addFields(
             [
-                { name: 'General', value: buildGeneralStatsString(collectorStats) },
-                { name: 'Boss Stats', value: buildBossStatsString(collectorStats) }
+                { name: 'General', value: buildGeneralStatsString(collectorStats) }
             ]
         );
 
-    const playerbreakdown = new MessageEmbed()
-        .setTitle('Player Breakdown')
-        .setColor(4688353)
-        .addFields(
-            [
-                ...buildPlayerStatsFields(collectorStats)
-            ]
-        );
-
-    const roles = new MessageEmbed()
-        .setTitle('Roles')
-        .setColor(4688353)
-        .setDescription(`\`\`\`${'Account Name'.padding(25)}Count\`\`\``)
-        .addFields(
-            [
-                ...buildRoleStatsFields(collectorStats)
-            ]
-        );
-
-    return await interaction.reply({ embeds: [general, playerbreakdown, roles] });
+    return await interaction.reply({ embeds: [general] });
 };

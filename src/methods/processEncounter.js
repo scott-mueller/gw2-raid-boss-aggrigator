@@ -90,7 +90,12 @@ const computeRoles = function (bossHealthLost, player, buffMap) {
             tags.push(buffDesc.name);
         }
 
-        if (buffDesc.name === 'Last Rites') {
+        if (player.profession === 'Mirage' ** buffDesc.name === 'Might' && totalGeneration > 3) {
+            tags.push(buffDesc.name);
+        }
+
+        // Scourges taking Blood Magic are probably heal scourges
+        if (player.profession === 'Scourge' && buffDesc.name === 'Last Rites') {
             tags.push('Healer');
         }
 
@@ -113,6 +118,7 @@ const computeDmgStats = function (player) {
 
     const returnObject = {
         totalDamage: path(['dpsAll', 0, 'damage'])(player),
+        defianceBarDamage: path(['dpsAll', 0, 'breakbarDamage'])(player),
         targetDPS: 0,
         totalDPS: path(['dpsAll', 0, 'dps'])(player)
     };
@@ -231,8 +237,10 @@ const processNewLog = async function (dpsReportUrl, permalink, evtcJSON, collect
         },
         accountNames: [],
         bossName: path(['fightName'])(evtcJSON),
+        fightIcon: evtcJSON?.fightIcon,
         duration: path(['duration'])(evtcJSON),
         durationMs: path(['duration'])(evtcJSON).convertToMs(),
+        utcTimeStart: new Date(evtcJSON.timeStart),
         utcTimeEnd: new Date(evtcJSON.timeEnd),
         success: path(['success'])(evtcJSON),
         players: [],
@@ -294,7 +302,8 @@ const processNewLog = async function (dpsReportUrl, permalink, evtcJSON, collect
                 defensiveStats: {
                     downs: buildPlayerMechanicArray(downs, player.name, player.account),
                     deaths: buildPlayerMechanicArray(deaths, player.name, player.account),
-                    damageTaken: path(['defenses', '0', 'damageTaken'])(player)
+                    damageTaken: path(['defenses', '0', 'damageTaken'])(player),
+                    damageBarrier: path(['defenses', '0', 'damageBarrier'])(player)
                 },
                 supportStats: {
                     revives: pathOr(0, ['support', '0', 'resurrects'])(player),

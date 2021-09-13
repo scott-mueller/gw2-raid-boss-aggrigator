@@ -1,7 +1,8 @@
 /* eslint-disable no-extend-native */
 import { MessageEmbed } from 'discord.js';
-import { uniq } from 'ramda';
+import { equals, uniq } from 'ramda';
 import { mongoFind, mongoFindOne, mongoUpdateById } from '../../methods/mongo';
+import Moment from 'moment-timezone';
 
 String.prototype.padding = function (n, c) {
 
@@ -80,8 +81,8 @@ ${'Revives:'.padding(12)}${account.revives}
 ${'ReviveTime:'.padding(12)}${account.reviveTime.toFixed(1)}s
 \`\`\`` +
 `\`\`\`
-${'Downs:'.padding(12)}${account.downs} 
-${'Deaths:'.padding(12)}${account.deaths}
+${'Downs:'.padding(12)}${account.downDeathStats.downs} 
+${'Deaths:'.padding(12)}${account.downDeathStats.deaths}
 \`\`\``;
 
     return str;
@@ -134,6 +135,10 @@ const buildRoleString = function (roleStat) {
     return `\`\`\`${str}\`\`\``;
 };
 
+
+///////////////////////////////////// ^^^
+///////////////////////////////////// Above is garbage!!
+
 const computeEncounterStats = async function (collectorId) {
 
     const encounters = await mongoFind('encounters', { collectorId } );
@@ -141,6 +146,9 @@ const computeEncounterStats = async function (collectorId) {
     const globalStats = {
         logCount: encounters.length,
         successCount: 0,
+        combatTime: 0,
+        firstEncounterStart: new Date('3000-12-31'),
+        lastEncounterEnd: new Date('1960-1-1'),
         bosses: {
 
         },
@@ -151,23 +159,33 @@ const computeEncounterStats = async function (collectorId) {
 
     encounters.forEach((encounter) => {
 
-        // Global Stats
+        const formattedBossName = encounter.bossName.split(' ').join('-');
+        const boss = globalStats.bosses[formattedBossName] || {
+            name: encounter.bossName,
+            icon: encounter.fightIcon,
+            totalBossDps: 0,
+            totalCleaveDps: 0,
+            success: 0,
+            fail: 0,
+            downs: 0,
+            deaths: 0
+        };
+
         if (encounter.success) {
             globalStats.successCount++;
-        }
-
-        const formattedBossName = encounter.bossName.split(' ').join('-');
-        if (globalStats.bosses[formattedBossName]) {
-            encounter.success
-                ? globalStats.bosses[formattedBossName].success++
-                : globalStats.bosses[formattedBossName].fail++;
+            boss.success++;
         }
         else {
-            const boss = { name: encounter.bossName, success: 0, fail: 0 };
-            encounter.success
-                ? boss.success++
-                : boss.fail++;
-            globalStats.bosses[formattedBossName] = boss;
+            boss.fail++;
+        }
+
+        globalStats.combatTime += encounter.durationMs;
+        if (Moment(encounter.utcTimeStart).isBefore(globalStats.firstEncounterStart)) {
+            globalStats.firstEncounterStart = encounter.utcTimeStart;
+        }
+
+        if (Moment(encounter.utcTimeEnd).isAfter(globalStats.lastEncounterEnd)) {
+            globalStats.lastEncounterEnd = encounter.utcTimeEnd;
         }
 
         encounter.players.forEach((player) => {
@@ -179,29 +197,79 @@ const computeEncounterStats = async function (collectorId) {
             const formattedAccountName = player.accountName.split(' ').join('-');
             const playerStats = globalStats.accounts[formattedAccountName] || {
                 accountName: player.accountName,
-                downs: 0,
-                deaths: 0,
+                professionAggrigates: {},
+                downDeathStats: {
+                    firstDownCount: 0,
+                    firstDeathCount: 0,
+                    downs: 0,
+                    deaths: 0
+                },
                 revives: 0,
                 reviveTime: 0,
                 roleMap: {},
                 encounterCount: 0,
                 totalBossDps: 0,
-                totalCleaveDps: 0
+                totalCleaveDps: 0,
+                totalBreakbarDamage: 0,
+                totalDamageTaken: 0,
+                totalBarrierTaken: 0
             };
 
-            playerStats.downs += player.defensiveStats.downs.length;
-            playerStats.deaths += player.defensiveStats.deaths.length;
+            playerStats.downDeathStats.downs += player.defensiveStats.downs.length;
+            playerStats.downDeathStats.deaths += player.defensiveStats.deaths.length;
+            playerStats.downDeathStats.firstDownCount += encounter.firstDown === player.accountName ? 1 : 0;
+            playerStats.downDeathStats.firstDeathCount += encounter.firstDeath === player.accountName ? 1 : 0;
             playerStats.revives += player.supportStats.revives;
             playerStats.reviveTime += player.supportStats.reviveTimes;
             playerStats.encounterCount++;
             playerStats.totalBossDps += player.dmgStats.targetDPS;
             playerStats.totalCleaveDps += player.dmgStats.totalDPS;
+            playerStats.totalDamageTaken += player.defensiveStats.damageTaken;
+            playerStats.damageBarrier += player.defensiveStats.damageBarrier;
 
             globalStats.totalBossDps += player.dmgStats.targetDPS;
             globalStats.totalCleaveDps += player.dmgStats.totalDPS;
 
-            player.roles.forEach((role) => {
+            boss.totalBossDps += player?.dmgStats?.targetDPS;
+            boss.totalCleaveDps += player?.dmgStats?.totalDPS;
+            boss.downs += player.defensiveStats.downs.length;
+            boss.deaths += player.defensiveStats.deaths.length;
 
+            const professionArr = playerStats.professionAggrigates[player.profession] || [];
+            const profession = professionArr.find((value) => {
+                const existingRoles = value.roles.sort();
+                const incomingRoles = player.roles.sort();
+                return equals(existingRoles, incomingRoles);
+            }) || {
+                count: 0,
+                roles: player.roles,
+                totalBossDps: 0,
+                totalCleaveDps: 0,
+                revives: 0,
+                reviveTime: 0,
+                downs: 0,
+                deaths: 0
+            };
+            const spliceIndex = professionArr.indexOf(profession);
+
+            profession.count++;
+            profession.totalBossDps += player.dmgStats.targetDPS;
+            profession.totalCleaveDps += player.dmgStats.totalDPS;
+            profession.revives += player.supportStats.revives;
+            profession.reviveTime += player.supportStats.reviveTimes;
+            profession.downs += player.defensiveStats.downs.length;
+            profession.deaths += player.defensiveStats.deaths.length;
+
+            if (spliceIndex === -1) {
+                professionArr.push(profession);
+            }
+            else {
+                professionArr.splice(spliceIndex, 1, profession);
+            }
+
+            playerStats.professionAggrigates[player.profession] = professionArr;
+
+            player.roles.forEach((role) => {
                 const formattedRoleName = role.split(' ').join('-');
                 playerStats.roleMap[formattedRoleName]
                     ? playerStats.roleMap[formattedRoleName].count++
@@ -212,6 +280,7 @@ const computeEncounterStats = async function (collectorId) {
             });
 
             globalStats.accounts[formattedAccountName] = playerStats;
+            globalStats.bosses[formattedBossName] = boss;
 
         });
     });

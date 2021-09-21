@@ -3,6 +3,7 @@ import { MessageEmbed } from 'discord.js';
 import { equals } from 'ramda';
 import { mongoFind, mongoFindOne, mongoUpdateById } from '../../methods/mongo';
 import Moment from 'moment-timezone';
+import { LinkedList, ListNode } from '../../methods/LinkedList';
 
 String.prototype.padding = function (n, c) {
 
@@ -48,15 +49,23 @@ const computeEncounterStats = async function (collectorId) {
         combatTime: 0,
         firstEncounterStart: new Date('3000-12-31'),
         lastEncounterEnd: new Date('1960-1-1'),
-        bosses: {
-
-        },
+        bosses: {},
+        timeline: new LinkedList(new ListNode('start')),
         accounts: {},
         totalBossDps: 0,
         totalCleaveDps: 0
     };
 
-    encounters.forEach((encounter) => {
+    // Sort the encounters by startTime, then we can collect groups of bosses by same consecutive
+    const sortedEncounters = encounters.sort((a, b) => {
+        if (Moment(a.utcTimeStart).isBefore(Moment(b.utcTimeStart))) {
+            return -1;
+        }
+
+        return 1;
+    });
+
+    sortedEncounters.forEach((encounter) => {
 
         const formattedBossName = encounter.bossName.split(' ').join('-');
         const boss = globalStats.bosses[formattedBossName] || {
@@ -64,20 +73,68 @@ const computeEncounterStats = async function (collectorId) {
             icon: encounter.fightIcon,
             totalBossDps: 0,
             totalCleaveDps: 0,
+            combatTime: 0,
+            firstEncounterStart: new Date('3000-12-31'),
+            lastEncounterEnd: new Date('1960-1-1'),
             success: 0,
             fail: 0,
             downs: 0,
             deaths: 0
         };
 
+        const currentNode = globalStats.timeline.getLast();
+        const timelineNode = currentNode.data?.name === encounter.bossName ?
+            currentNode.data : {
+                name: encounter.bossName,
+                icon: encounter.fightIcon,
+                count: 0,
+                combatTime: 0,
+                success: false,
+                firstEncounterStart: new Date('3000-12-31'),
+                lastEncounterEnd: new Date('1960-1-1'),
+                encounterArray: []
+            };
+
         if (encounter.success) {
             globalStats.successCount++;
             boss.success++;
+            currentNode.success = true;
         }
         else {
             boss.fail++;
         }
 
+        timelineNode.encounterArray.push(encounter.encounterId);
+        timelineNode.count++;
+
+        // Timeline Combat Time
+        timelineNode.combatTime += encounter.durationMs;
+        if (Moment(encounter.utcTimeStart).isBefore(timelineNode.firstEncounterStart)) {
+            timelineNode.firstEncounterStart = encounter.utcTimeStart;
+        }
+
+        if (Moment(encounter.utcTimeEnd).isAfter(timelineNode.lastEncounterEnd)) {
+            timelineNode.lastEncounterEnd = encounter.utcTimeEnd;
+        }
+
+        if (currentNode.data?.name !== timelineNode.name) {
+            currentNode.next = new ListNode(timelineNode);
+        }
+        else {
+            currentNode.replaceData(timelineNode);
+        }
+
+        // Boss Combat Time
+        boss.combatTime += encounter.durationMs;
+        if (Moment(encounter.utcTimeStart).isBefore(boss.firstEncounterStart)) {
+            boss.firstEncounterStart = encounter.utcTimeStart;
+        }
+
+        if (Moment(encounter.utcTimeEnd).isAfter(boss.lastEncounterEnd)) {
+            boss.lastEncounterEnd = encounter.utcTimeEnd;
+        }
+
+        // Global Combat Time
         globalStats.combatTime += encounter.durationMs;
         if (Moment(encounter.utcTimeStart).isBefore(globalStats.firstEncounterStart)) {
             globalStats.firstEncounterStart = encounter.utcTimeStart;
@@ -123,8 +180,9 @@ const computeEncounterStats = async function (collectorId) {
             playerStats.encounterCount++;
             playerStats.totalBossDps += player.dmgStats.targetDPS;
             playerStats.totalCleaveDps += player.dmgStats.totalDPS;
+            playerStats.totalBreakbarDamage += player.dmgStats.defianceBarDamage;
             playerStats.totalDamageTaken += player.defensiveStats.damageTaken;
-            playerStats.damageBarrier += player.defensiveStats.damageBarrier;
+            playerStats.totalBarrierTaken += player.defensiveStats.damageBarrier;
 
             globalStats.totalBossDps += player.dmgStats.targetDPS;
             globalStats.totalCleaveDps += player.dmgStats.totalDPS;
@@ -183,6 +241,8 @@ const computeEncounterStats = async function (collectorId) {
 
         });
     });
+
+    globalStats.timeline.getLast().next = new ListNode('end');
 
     return globalStats;
 };

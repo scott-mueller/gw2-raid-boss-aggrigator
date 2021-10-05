@@ -41,7 +41,7 @@ ${acdps.padding(20)}${(stats.totalCleaveDps / stats.logCount).toFixed(0).toStrin
 
 const computeEncounterStats = async function (collectorId) {
 
-    const encounters = await mongoFind('encounters', { collectorId } );
+    const encounters = await mongoFind('encounters', { collectors: collectorId } );
 
     const globalStats = {
         logCount: encounters.length,
@@ -168,7 +168,9 @@ const computeEncounterStats = async function (collectorId) {
                 totalCleaveDps: 0,
                 totalBreakbarDamage: 0,
                 totalDamageTaken: 0,
-                totalBarrierTaken: 0
+                totalBarrierTaken: 0,
+                totalScholarRuneUptime: 0,
+                totalThiefRuneUptime: 0
             };
 
             playerStats.downDeathStats.downs += player.defensiveStats.downs.length;
@@ -183,6 +185,9 @@ const computeEncounterStats = async function (collectorId) {
             playerStats.totalBreakbarDamage += player.dmgStats.defianceBarDamage;
             playerStats.totalDamageTaken += player.defensiveStats.damageTaken;
             playerStats.totalBarrierTaken += player.defensiveStats.damageBarrier;
+
+            playerStats.totalScholarRuneUptime += player.damageModifiers.scholarRuneUptime;
+            playerStats.totalThiefRuneUptime += player.damageModifiers.thiefRuneUptime;
 
             globalStats.totalBossDps += player.dmgStats.targetDPS;
             globalStats.totalCleaveDps += player.dmgStats.totalDPS;

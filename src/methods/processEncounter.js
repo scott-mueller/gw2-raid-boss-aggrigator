@@ -159,6 +159,30 @@ const computeBoonUptimes = function (player, buffMap) {
     return returnObject;
 };
 
+const computeDamageModifierStats = function (player, damageModMap) {
+
+    const computeDamageModifierUptime = (modifierName) => {
+
+        const modifierKey =
+            Object
+                .keys(damageModMap)
+                .find((key) => damageModMap[key].name.toLowerCase() === modifierName.toLowerCase());
+
+        const dataPoint = player.damageModifiersTarget[0].find((modifier) => modifier.id.toString() === modifierKey.substring(1))?.damageModifiers[0];
+
+        if (dataPoint) {
+            return parseFloat(((dataPoint.hitCount / dataPoint.totalHitCount) * 100).toFixed(1));
+        }
+
+        return 0;
+    };
+
+    return {
+        scholarRuneUptime: computeDamageModifierUptime('Scholar Rune'),
+        thiefRuneUptime: computeDamageModifierUptime('Thief Rune')
+    };
+};
+
 const determineFirstMechanicOccurrence = function (mechanicsData) {
 
     let first = 9999999999;
@@ -198,20 +222,22 @@ const isExistingLog = async function (evtcJSON) {
     const existingLogs = await mongoFind('encounters', query);
 
     //loop through the existing logs and see if we have a match on the time boundries
-    let exists = false;
+    const returnObj = {
+        exists: false,
+        encounter: undefined
+    };
+
     existingLogs.forEach((encounter) => {
 
         const utcTimeEnd = Moment(new Date(evtcJSON.timeEnd));
 
         if (utcTimeEnd.isAfter(encounter.uniqueChecking.timeEndLowerBound) && utcTimeEnd.isBefore(encounter.uniqueChecking.timeEndUpperBound)) {
-            exists = true;
+            returnObj.exists = true;
+            returnObj.encounter = encounter;
         }
     });
 
-    return {
-        exists,
-        encounter: existingLogs[0]
-    };
+    return returnObj;
 };
 
 const getActiveCollector = async function (guildId, channelId) {
@@ -229,7 +255,7 @@ const processNewLog = async function (dpsReportUrl, permalink, evtcJSON, collect
 
     const newEncounter = {
         encounterId: generateId(),
-        collectorId,
+        collectors: collectorId ? [collectorId] : [],
         uniqueChecking: {
             recordedByList: [],
             timeEndLowerBound: undefined,
@@ -305,6 +331,7 @@ const processNewLog = async function (dpsReportUrl, permalink, evtcJSON, collect
                     damageTaken: path(['defenses', '0', 'damageTaken'])(player),
                     damageBarrier: path(['defenses', '0', 'damageBarrier'])(player)
                 },
+                damageModifiers: computeDamageModifierStats(player, path(['damageModMap'])(evtcJSON)),
                 supportStats: {
                     revives: pathOr(0, ['support', '0', 'resurrects'])(player),
                     reviveTimes: pathOr(0, ['support', '0', 'resurrectTime'])(player),
@@ -389,14 +416,21 @@ export const maybeProcessEncounter = async function (guildId, message) {
 
                 // add the collector if one is running
                 const { encounter } = existingLogStatus;
-                if (collectorId && !encounter.collectorId) {
+                if (collectorId) {
                     console.log('Adding collector to existing log');
-                    await mongoUpdateById('encounters', encounter._id, { collectorId });
+                    if (encounter.collectors) {
+                        await mongoUpdateById('encounters', encounter._id, { collectors: uniq([...encounter.collectors, collectorId]) });
+                    }
+                    else {
+                        await mongoUpdateById('encounters', encounter._id, { collectors: [collectorId] });
+                    }
                 }
             }
             else {
                 console.log( `Processing new log with permalink: ${permalink}` );
                 await processNewLog(url, permalink, evtcJSON, collectorId);
+
+                // setTimeout here that checks the db for duplicates and removes one
             }
         }
         catch (err) {

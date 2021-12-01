@@ -2,6 +2,7 @@
 import { path, pathOr, uniq } from 'ramda';
 import { mongoFind, mongoInsert, mongoFindOne, mongoUpdateById } from './mongo';
 import { getOrCreatePlayer } from './users';
+import { Server } from '../server';
 import { config } from '../config';
 import { customAlphabet } from 'nanoid';
 import Axios from 'axios';
@@ -168,13 +169,13 @@ const computeDamageModifierStats = function (player, damageModMap) {
                 .keys(damageModMap)
                 .find((key) => damageModMap[key].name.toLowerCase() === modifierName.toLowerCase());
 
-        const dataPoint = player.damageModifiersTarget[0].find((modifier) => modifier.id.toString() === modifierKey.substring(1))?.damageModifiers[0];
+        const dataPoint = player.damageModifiersTarget[0].find((modifier) => modifier.id.toString() === modifierKey?.substring(1))?.damageModifiers[0];
 
         if (dataPoint) {
             return parseFloat(((dataPoint.hitCount / dataPoint.totalHitCount) * 100).toFixed(1));
         }
 
-        return 0;
+        return 100;
     };
 
     return {
@@ -364,7 +365,55 @@ const processNewLog = async function (dpsReportUrl, permalink, evtcJSON, collect
     }
 };
 
-export const maybeProcessEncounter = async function (guildId, message) {
+export const processEncounter = async ({ guildId, channelId, url }) => {
+
+    try {
+        const permalink = url.substring(19);
+
+        const dpsReportBaseUrl = config.apis.dpsReport.baseUrl;
+        const response = await Axios({
+            method: 'GET',
+            url: `${dpsReportBaseUrl}/getJson?permalink=${permalink}`
+        });
+        const evtcJSON = response.data;
+
+        if (response.status !== 200 || !evtcJSON || !evtcJSON.arcVersion) {
+            throw new Error('Invalid encounter returned from dps.report api');
+        }
+
+        const existingLogStatus = await isExistingLog(evtcJSON);
+        const collectorId = await getActiveCollector(guildId, channelId);
+
+        // Process the log
+        if (existingLogStatus.exists) {
+            console.log( `Log already captured for permalink: ${permalink}` );
+
+            // add the collector if one is running
+            const { encounter } = existingLogStatus;
+            if (collectorId) {
+                console.log('Adding collector to existing log');
+                if (encounter.collectors) {
+                    await mongoUpdateById('encounters', encounter._id, { collectors: uniq([...encounter.collectors, collectorId]) });
+                }
+                else {
+                    await mongoUpdateById('encounters', encounter._id, { collectors: [collectorId] });
+                }
+            }
+        }
+        else {
+            console.log( `Processing new log with permalink: ${permalink}` );
+            await processNewLog(url, permalink, evtcJSON, collectorId);
+        }
+    }
+    catch (err) {
+
+        console.log( 'Error processing DPS Report' );
+        console.log( err );
+        return;
+    }
+};
+
+export const captureLogsForProcessing = async function (guildId, message) {
 
     let dpsReportUrls = [];
 
@@ -390,57 +439,17 @@ export const maybeProcessEncounter = async function (guildId, message) {
         return 0;
     }
 
-    for (let i = 0; i < dpsReportUrls.length; ++i) {
+    // Queue the messages for processing
+    dpsReportUrls.forEach((url) => {
 
-        const url = dpsReportUrls[i];
-        const permalink = url.substring(19);
+        const msg = {
+            guildId,
+            channelId: message.channel.id,
+            url
+        };
+        Server.amqpChannel.sendToQueue('gw2-rba-encounters', Buffer.from( JSON.stringify( msg ), 'utf8' ));
+    });
 
-        try {
-            const dpsReportBaseUrl = config.apis.dpsReport.baseUrl;
-            const response = await Axios({
-                method: 'GET',
-                url: `${dpsReportBaseUrl}/getJson?permalink=${permalink}`
-            });
-            const evtcJSON = response.data;
-
-            if (response.status !== 200 || !evtcJSON || !evtcJSON.arcVersion) {
-                throw new Error('Invalid encounter returned from dps.report api');
-            }
-
-            const existingLogStatus = await isExistingLog(evtcJSON);
-            const collectorId = await getActiveCollector(guildId, message.channel.id);
-
-            // Process the log
-            if (existingLogStatus.exists) {
-                console.log( `Log already captured for permalink: ${permalink}` );
-
-                // add the collector if one is running
-                const { encounter } = existingLogStatus;
-                if (collectorId) {
-                    console.log('Adding collector to existing log');
-                    if (encounter.collectors) {
-                        await mongoUpdateById('encounters', encounter._id, { collectors: uniq([...encounter.collectors, collectorId]) });
-                    }
-                    else {
-                        await mongoUpdateById('encounters', encounter._id, { collectors: [collectorId] });
-                    }
-                }
-            }
-            else {
-                console.log( `Processing new log with permalink: ${permalink}` );
-                await processNewLog(url, permalink, evtcJSON, collectorId);
-
-                // setTimeout here that checks the db for duplicates and removes one
-            }
-        }
-        catch (err) {
-
-            console.log( 'Error processing DPS Report' );
-            console.log( err );
-            continue;
-        }
-    }
-
-    console.log( `Processed ${dpsReportUrls.length} Logs` );
+    console.log( `Queued ${dpsReportUrls.length} Logs for processing` );
     return dpsReportUrls.length;
 };

@@ -2,17 +2,19 @@ import Express from 'express';
 
 import mongodb from 'mongodb';
 
-import { maybeProcessEncounter } from './methods/processEncounter';
+import { captureLogsForProcessing, processEncounter } from './methods/processEncounter';
 import { config as Config } from './config';
 import { mongoInsert, mongoFind, mongoUpdateById, mongoDeleteById } from './methods/mongo';
 import { assert } from 'chai';
 import { Client, Collection, Intents } from 'discord.js';
 import commands from './commands13';
 import registerRoutes from './routes';
+import amqp from 'amqplib';
 
 export const Server = {
     bot: undefined,
-    db: undefined
+    db: undefined,
+    amqpChannel: undefined
 };
 
 export const startServer = async function () {
@@ -69,20 +71,19 @@ export const startServer = async function () {
 
         bot.once('ready', (evt) => {
 
-            console.log('Connected');
-            console.log('Logged in as: ');
-            console.log(bot.user.username + ' - (' + bot.user.id + ')');
+            console.log('Connected to Discord');
+            console.log('Logged in as: ' + bot.user.username + ' - (' + bot.user.id + ')');
 
             Server.bot = bot;
 
             return resolve('Discord Bot Ready');
         });
 
-        bot.on('message', async (message) => {
+        bot.on('messageCreate', async (message) => {
 
             console.log( `Message Recieved: UserID: ${message.author.id}, ChannelID: ${message.channel.id}` );
             const guildId = message.guild.id;
-            await maybeProcessEncounter(guildId, message);
+            await captureLogsForProcessing(guildId, message);
             return;
         });
 
@@ -104,6 +105,35 @@ export const startServer = async function () {
 
     }));
 
+    // RabbitMQ
+    promises.push(new Promise( async (resolve, reject) => {
+
+        console.log('connecting to AMQP');
+        try {
+            const connection = await amqp.connect('amqp://localhost');
+            const channel = await connection.createChannel();
+
+            channel.assertQueue('gw2-rba-encounters');
+            Server.amqpChannel = channel;
+
+            channel.consume('gw2-rba-encounters', async (msg) => {
+
+                await processEncounter(JSON.parse(msg.content.toString()));
+                channel.ack(msg);
+            });
+
+            console.log('Connected to AMQP');
+
+        }
+        catch (err) {
+            console.log(err);
+            return reject(err);
+        }
+
+        resolve();
+    }));
+
+    // Express Server
     promises.push(new Promise( async (resolve, reject) => {
 
         const app = Express();

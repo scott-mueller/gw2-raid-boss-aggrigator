@@ -57,6 +57,34 @@ export const startServer = async function () {
         });
     }));
 
+    // RabbitMQ
+    promises.push(new Promise( async (resolve, reject) => {
+
+        console.log('connecting to AMQP');
+        try {
+            const connection = await amqp.connect(Config.amqp.host);
+            const channel = await connection.createChannel();
+
+            channel.assertQueue(Config.amqp.queueName);
+            Server.amqpChannel = channel;
+
+            channel.consume(Config.amqp.queueName, async (msg) => {
+
+                await processEncounter(JSON.parse(msg.content.toString()));
+                channel.ack(msg);
+            });
+
+            console.log('Connected to AMQP');
+
+        }
+        catch (err) {
+            console.log(err);
+            return reject(err);
+        }
+
+        resolve();
+    }));
+
     // Initialize Discord Bot
     promises.push(new Promise( (resolve, reject) => {
 
@@ -103,47 +131,6 @@ export const startServer = async function () {
             }
         });
 
-    }));
-
-    // RabbitMQ
-    promises.push(new Promise( async (resolve, reject) => {
-
-        console.log('connecting to AMQP');
-        try {
-            const connection = await amqp.connect('amqp://localhost');
-            const channel = await connection.createChannel();
-
-            channel.assertQueue('gw2-rba-encounters');
-            Server.amqpChannel = channel;
-
-            channel.consume('gw2-rba-encounters', async (msg) => {
-
-                await processEncounter(JSON.parse(msg.content.toString()));
-                channel.ack(msg);
-            });
-
-            console.log('Connected to AMQP');
-
-        }
-        catch (err) {
-            console.log(err);
-            return reject(err);
-        }
-
-        resolve();
-    }));
-
-    // Express Server
-    promises.push(new Promise( async (resolve, reject) => {
-
-        const app = Express();
-
-        await registerRoutes(app);
-
-        app.listen(Config.port, () => {
-            console.log(`Express Server listening on port ${Config.port}`);
-            return resolve();
-        });
     }));
 
     return await Promise.all(promises);

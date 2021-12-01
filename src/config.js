@@ -15,6 +15,11 @@ export const config = {
         dbName: 'gw2-rba'
     },
 
+    amqp: {
+        host: process.env.AMQP_URL || 'amqp://localhost',
+        queueName: 'gw2-rba-encounters'
+    },
+
     apis: {
         dpsReport: {
             baseUrl: `https://dps.report`

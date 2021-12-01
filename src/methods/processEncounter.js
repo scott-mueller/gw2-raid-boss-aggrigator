@@ -447,7 +447,7 @@ export const captureLogsForProcessing = async function (guildId, message) {
             channelId: message.channel.id,
             url
         };
-        Server.amqpChannel.sendToQueue('gw2-rba-encounters', Buffer.from( JSON.stringify( msg ), 'utf8' ));
+        Server.amqpChannel.sendToQueue(config.amqp.queueName, Buffer.from( JSON.stringify( msg ), 'utf8' ));
     });
 
     console.log( `Queued ${dpsReportUrls.length} Logs for processing` );

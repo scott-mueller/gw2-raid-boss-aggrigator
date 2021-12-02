@@ -11,6 +11,7 @@
   "scripts": {
     "start": "node --experimental-specifier-resolution=node bootstrap.js",
     "debug": "nodemon --inspect=4500 --experimental-specifier-resolution=node bootstrap.js",
+    "clean": "rm -rf node_modules",
     "deploy-local": "MODE=deploy-test node bootstrap.js",
     "deploy-global": "MODE=deploy-global node bootstrap.js",
     "google-auth": "node googleAuth.js"

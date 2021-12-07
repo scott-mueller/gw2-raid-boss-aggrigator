@@ -1,5 +1,3 @@
-import Express from 'express';
-
 import mongodb from 'mongodb';
 
 import { captureLogsForProcessing, processEncounter } from './methods/processEncounter';
@@ -8,7 +6,6 @@ import { mongoInsert, mongoFind, mongoUpdateById, mongoDeleteById } from './meth
 import { assert } from 'chai';
 import { Client, Collection, Intents } from 'discord.js';
 import commands from './commands13';
-import registerRoutes from './routes';
 import amqp from 'amqplib';
 
 export const Server = {
@@ -66,6 +63,7 @@ export const startServer = async function () {
             const channel = await connection.createChannel();
 
             channel.assertQueue(Config.amqp.queueName);
+            channel.prefetch(1);
             Server.amqpChannel = channel;
 
             channel.consume(Config.amqp.queueName, async (msg) => {

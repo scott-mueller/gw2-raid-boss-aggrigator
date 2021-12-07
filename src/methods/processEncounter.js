@@ -404,6 +404,8 @@ export const processEncounter = async ({ guildId, channelId, url }) => {
             console.log( `Processing new log with permalink: ${permalink}` );
             await processNewLog(url, permalink, evtcJSON, collectorId);
         }
+
+        console.log(`Processing Complete for permalink: ${permalink}`);
     }
     catch (err) {
 
@@ -411,6 +413,7 @@ export const processEncounter = async ({ guildId, channelId, url }) => {
         console.log( err );
         return;
     }
+
 };
 
 export const captureLogsForProcessing = async function (guildId, message) {

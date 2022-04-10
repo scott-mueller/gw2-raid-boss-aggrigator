@@ -39,6 +39,36 @@ ${acdps.padding(20)}${(stats.totalCleaveDps / stats.logCount).toFixed(0).toStrin
     return str;
 };
 
+const determineThumbnailImage = function (successCount, logCount) {
+
+    const successRate = ((successCount / logCount) * 100).toFixed(0);
+
+    if (successRate < 20) {
+        return 'https://i.imgur.com/AKL1WcS.jpg';
+    }
+
+    if (successRate >= 20 && successRate < 40) {
+        return 'https://i.imgur.com/RU6Ihum.jpg';
+    }
+
+    if (successRate >= 40 && successRate < 60) {
+        return 'https://i.imgur.com/6HnUomk.jpg';
+    }
+
+    if (successRate === 69) {
+        return 'https://i.imgur.com/G6Snaqa.jpg';
+    }
+
+    if (successRate >= 60 && successRate < 80) {
+        return 'https://i.imgur.com/pbNUFpo.jpg';
+    }
+
+    if (successRate >= 80) {
+        return 'https://i.imgur.com/xrlyMDL.jpg';
+    }
+
+};
+
 const computeEncounterStats = async function (collectorId) {
 
     const encounters = await mongoFind('encounters', { collectors: collectorId } );
@@ -274,7 +304,7 @@ export const handleCollectorEnd = async function (interaction) {
         .setURL(`https://scott-mueller.github.io/gw2-raid-dashboard/#/collector?collectorId=${collector._id}`)
         .setColor(4688353)
         .setTimestamp()
-        .setThumbnail('https://i.imgur.com/qb3bRS9.png')
+        .setThumbnail(determineThumbnailImage(collectorStats.successCount, collectorStats.logCount))
         .addFields(
             [
                 { name: 'General', value: buildGeneralStatsString(collectorStats) }

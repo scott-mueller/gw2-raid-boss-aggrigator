@@ -300,7 +300,6 @@ export const handleCollectorEnd = async function (interaction) {
     // Format the stats into the reply
     const general = new MessageEmbed()
         .setTitle(`Statistics! - ${collector._id}`)
-        .setDescription()
         .setDescription(`Click here for Stats!\nhttps://gw2-raid-dashboard.netlify.app/collector?collectorId=${collector._id}`)
         .setURL(`https://gw2-raid-dashboard.netlify.app/collector?collectorId=${collector._id}`)
         .setColor(4688353)

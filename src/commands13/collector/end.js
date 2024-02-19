@@ -1,6 +1,8 @@
 /* eslint-disable no-extend-native */
 import { MessageEmbed } from 'discord.js';
 import { equals } from 'ramda';
+import { Server } from '../../server';
+import { config } from '../../config';
 import { mongoFind, mongoFindOne, mongoUpdateById } from '../../methods/mongo';
 import Moment from 'moment-timezone';
 import { LinkedList, ListNode } from '../../methods/LinkedList';
@@ -174,6 +176,11 @@ const computeEncounterStats = async function (collectorId) {
             globalStats.lastEncounterEnd = encounter.utcTimeEnd;
         }
 
+        /**
+         * ##################################
+         * Compute Player Stats for encounter
+         * ##################################
+         */
         encounter.players.forEach((player) => {
 
             if (player.subgroup > 20) {
@@ -216,8 +223,8 @@ const computeEncounterStats = async function (collectorId) {
             playerStats.totalDamageTaken += player.defensiveStats.damageTaken;
             playerStats.totalBarrierTaken += player.defensiveStats.damageBarrier;
 
-            playerStats.totalScholarRuneUptime += player.damageModifiers.scholarRuneUptime;
-            playerStats.totalThiefRuneUptime += player.damageModifiers.thiefRuneUptime;
+            playerStats.totalScholarRuneUptime += player?.damageModifiers?.scholarRuneUptime ?? 0;
+            playerStats.totalThiefRuneUptime += player?.damageModifiers?.thiefRuneUptime ?? 0;
 
             globalStats.totalBossDps += player.dmgStats.targetDPS;
             globalStats.totalCleaveDps += player.dmgStats.totalDPS;
@@ -292,24 +299,37 @@ export const handleCollectorEnd = async function (interaction) {
         return await interaction.reply('There are no active collectors running. Start one with `/collector start`');
     }
 
+    // Check the processing queue is emtpy
+    const queue = await Server.amqpChannel.checkQueue(config.amqp.queueName);
+    if (queue.messageCount > 0) {
+        return await interaction.reply(`Logs have not finished processing. There are \` ${queue.messageCount} \` logs remaining. Please try again later.`);
+    }
+
     // Update the doc
     const endTime = Date.now();
-    const collectorStats = await computeEncounterStats(collector._id);
-    await mongoUpdateById('collectors', collector._id, { active: false, endTime, stats: collectorStats } );
+    try {
+        const collectorStats = await computeEncounterStats(collector._id);
+        await mongoUpdateById('collectors', collector._id, { active: false, endTime, stats: collectorStats } );
+        // Format the stats into the reply
+        const general = new MessageEmbed()
+            .setTitle(`Statistics! - ${collector._id}`)
+            .setDescription(`Click here for Stats!\nhttps://gw2-raid-dashboard.netlify.app/collector?collectorId=${collector._id}`)
+            .setURL(`https://gw2-raid-dashboard.netlify.app/collector?collectorId=${collector._id}`)
+            .setColor(4688353)
+            .setTimestamp()
+            .setThumbnail(determineThumbnailImage(collectorStats.successCount, collectorStats.logCount))
+            .addFields(
+                [
+                    { name: 'General', value: buildGeneralStatsString(collectorStats) }
+                ]
+            );
 
-    // Format the stats into the reply
-    const general = new MessageEmbed()
-        .setTitle(`Statistics! - ${collector._id}`)
-        .setDescription(`Click here for Stats!\nhttps://gw2-raid-dashboard.netlify.app/collector?collectorId=${collector._id}`)
-        .setURL(`https://gw2-raid-dashboard.netlify.app/collector?collectorId=${collector._id}`)
-        .setColor(4688353)
-        .setTimestamp()
-        .setThumbnail(determineThumbnailImage(collectorStats.successCount, collectorStats.logCount))
-        .addFields(
-            [
-                { name: 'General', value: buildGeneralStatsString(collectorStats) }
-            ]
-        );
+        return await interaction.reply({ embeds: [general] });
+    }
+    catch (err) {
+        console.log(err);
+        await mongoUpdateById('collectors', collector._id, { active: false, endTime } );
+        return await interaction.reply('Unable to compute stats for these encounters. Please contact <@222434814022647809>. Collector has been ended');
+    }
 
-    return await interaction.reply({ embeds: [general] });
 };
